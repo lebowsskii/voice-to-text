@@ -6,6 +6,10 @@ struct VoiceToTextApp: App {
 
     @State private var controller: DictationController
     @State private var panel: RecordingPanelController?
+    /// Auto-dismiss timer for the currently shown error. Re-created (and the
+    /// old one cancelled) every time `lastError` changes, so a stale timer
+    /// from a previous error can never dismiss the one currently on screen.
+    @State private var errorDismissTask: Task<Void, Never>?
     private let parakeet: ParakeetTranscriber
 
     init() {
@@ -47,14 +51,22 @@ struct VoiceToTextApp: App {
                 .onChange(of: controller.state) { _, _ in updatePanel() }
                 .onChange(of: controller.lastError) { _, error in
                     updatePanel()
-                    guard let error else { return }
-                    // Give the user time to read it, then get out of the way —
-                    // but only if `error` is still the error on screen. A newer
-                    // one (or a manual dismiss) must not be cut short by a timer
-                    // that was started for a message the user already saw.
-                    Task {
+
+                    // Whatever was showing before — gone now, whether it was
+                    // dismissed, replaced, or cleared by a fresh dictation.
+                    // Its timer must not reach into the future and dismiss
+                    // whatever (if anything) replaces it, even if the new
+                    // error has the exact same text as the old one.
+                    errorDismissTask?.cancel()
+
+                    guard error != nil else {
+                        errorDismissTask = nil
+                        return
+                    }
+                    // Give the user time to read it, then get out of the way.
+                    errorDismissTask = Task {
                         try? await Task.sleep(for: .seconds(6))
-                        guard controller.lastError == error else { return }
+                        guard !Task.isCancelled else { return }
                         controller.dismissError()
                     }
                 }
