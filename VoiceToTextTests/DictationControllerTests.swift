@@ -180,4 +180,47 @@ struct DictationControllerTests {
 
         #expect(controller.lastError == nil)
     }
+
+    @Test("second toggle enters .transcribing synchronously, before the finish task can run")
+    func secondToggleEntersTranscribingSynchronously() {
+        let controller = makeController()
+
+        controller.toggle()  // idle -> recording
+        controller.toggle()  // recording -> transcribing
+
+        // No `await` anywhere above: if this were still true only once the
+        // background `finish()` task got around to running, `state` would still
+        // read `.recording` here, and `cancel()` landing in this window would
+        // take the wrong branch.
+        #expect(controller.state == .transcribing)
+    }
+
+    @Test("cancelling right after the second toggle, before the finish task has run, still discards the recording")
+    func cancelImmediatelyAfterSecondToggleSkipsInsert() async {
+        let audio = FakeAudioSource()
+        let transcriber = SuspendableFakeTranscriber()
+        let inserter = FakeTextInserter()
+        let controller = DictationController(audio: audio, transcriber: transcriber, inserter: inserter)
+
+        controller.toggle()  // idle -> recording
+        controller.toggle()  // recording -> transcribing, kicks off finish()
+        let finishTask = controller.finishTaskForTesting
+
+        // Cancel synchronously, with no `await` in between: the finish task's
+        // body has not run a single line yet, which is exactly the window
+        // where `state` must already read `.transcribing` for `cancel()` to
+        // take the right branch.
+        controller.cancel()
+        #expect(controller.state == .idle)
+
+        // The (cancelled) finish task still runs from the top and still calls
+        // `transcribe(_:)` — cancellation doesn't stop a task's body, only sets
+        // a flag it can check. Let it reach its suspension point and resolve
+        // it, or `await finishTask?.value` below would hang forever.
+        await transcriber.waitUntilStarted()
+        transcriber.resume(with: .success("hello"))
+        await finishTask?.value
+
+        #expect(inserter.inserted.isEmpty)
+    }
 }
