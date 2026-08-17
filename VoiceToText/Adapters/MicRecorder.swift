@@ -22,6 +22,8 @@ final class MicRecorder: AudioSource {
             throw DictationError.microphoneUnavailable
         }
 
+        teardown()
+
         samplesLock.withLock {
             samples.removeAll(keepingCapacity: true)
         }
