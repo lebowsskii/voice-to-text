@@ -27,6 +27,14 @@ struct VoiceToTextApp: App {
                 scheduler: TimerRestoreScheduler()
             )
         ))
+
+        // `cancelDictation` is a bare Esc, registered globally via Carbon. Left
+        // enabled at all times it would swallow every Esc press system-wide —
+        // closing dialogs, exiting vim, dismissing autocomplete — since a
+        // registered hotkey goes to us *instead of* the focused app, not
+        // alongside it. Start disabled; `updateCancelShortcut` below toggles
+        // it on only while a dictation is actually in flight.
+        KeyboardShortcuts.disable(.cancelDictation)
     }
 
     var body: some Scene {
@@ -53,7 +61,10 @@ struct VoiceToTextApp: App {
                         controller.cancel()
                     }
                 }
-                .onChange(of: controller.state) { _, _ in updatePanel() }
+                .onChange(of: controller.state) { _, newState in
+                    updatePanel()
+                    updateCancelShortcut(for: newState)
+                }
                 .onChange(of: controller.lastError) { _, error in
                     updatePanel()
 
@@ -94,6 +105,21 @@ struct VoiceToTextApp: App {
             resolvedPanel.hide()
         } else {
             resolvedPanel.show()
+        }
+    }
+
+    /// Registers the global Esc hotkey only while a dictation is actually in
+    /// flight, so it never steals Esc from other apps at rest. `.idle` covers
+    /// all three ways a dictation ends — insert, cancel, error — since
+    /// `DictationController` funnels every exit path through the same
+    /// `reset()` that sets `state = .idle`.
+    @MainActor
+    private func updateCancelShortcut(for state: DictationController.State) {
+        switch state {
+        case .idle:
+            KeyboardShortcuts.disable(.cancelDictation)
+        case .recording, .transcribing:
+            KeyboardShortcuts.enable(.cancelDictation)
         }
     }
 }
