@@ -47,6 +47,9 @@ struct VoiceToTextApp: App {
             MenuBarLabel(state: controller.state)
                 .task {
                     // Downloads the model on first run; later launches just load it.
+                    // Discarding the error is safe only because `prepare()` logs
+                    // it and every later `transcribe()` reports it — there is no
+                    // UI at launch to show it in.
                     try? await parakeet.prepare()
                 }
                 .task {

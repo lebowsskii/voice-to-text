@@ -6,8 +6,11 @@ import os
 /// Apple Neural Engine.
 final class ParakeetTranscriber: Transcriber {
 
+    /// All three are guarded by `prepareLock`: they are written from the load
+    /// task and read from whatever context calls `transcribe`.
     private var manager: AsrManager?
     private var prepareTask: Task<Void, Error>?
+    private var loadFailure: String?
     private let prepareLock = NSLock()
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "parakeet")
 
@@ -31,10 +34,13 @@ final class ParakeetTranscriber: Transcriber {
 
                     self.log.info("Loading Parakeet v3 from \(self.modelsDirectory.path)")
                     let models = try await AsrModels.load(from: self.modelsDirectory, version: .v3)
-                    self.manager = AsrManager(models: models)
+                    self.prepareLock.withLock {
+                        self.manager = AsrManager(models: models)
+                    }
                     self.log.info("Parakeet v3 ready")
                 }
                 prepareTask = newTask
+                loadFailure = nil
                 return (newTask, true)
             }
         }
@@ -42,8 +48,14 @@ final class ParakeetTranscriber: Transcriber {
         do {
             try await task.value
         } catch {
-            if isNewTask {
-                prepareLock.withLock {
+            // The only place the real cause is visible: the caller at launch has
+            // nowhere to show it, and every later dictation sees just the
+            // summary in `loadFailure`.
+            log.error("Parakeet v3 failed to load: \(error.localizedDescription)")
+            prepareLock.withLock {
+                loadFailure = error.localizedDescription
+                // Clearing the task lets a later call retry the download.
+                if isNewTask {
                     prepareTask = nil
                 }
             }
@@ -52,8 +64,15 @@ final class ParakeetTranscriber: Transcriber {
     }
 
     func transcribe(_ clip: AudioClip) async throws -> String {
+        let (manager, loadFailure) = prepareLock.withLock { (self.manager, self.loadFailure) }
+
         guard let manager else {
-            throw DictationError.transcriptionFailed("Parakeet model is still loading")
+            // "Still loading" is a lie once the load has failed — it tells the
+            // user to wait for something that is never coming.
+            throw DictationError.transcriptionFailed(
+                loadFailure.map { "Parakeet model failed to load: \($0)" }
+                    ?? "Parakeet model is still loading"
+            )
         }
         guard !clip.isEmpty else { return "" }
 

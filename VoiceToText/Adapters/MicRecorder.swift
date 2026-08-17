@@ -11,7 +11,6 @@ final class MicRecorder: AudioSource {
     var onLevel: ((Float) -> Void)?
 
     private let engine = AVAudioEngine()
-    private var converter: AVAudioConverter?
     private var samples: [Float] = []
     private let samplesLock = NSLock()
     private var tapInstalled = false
@@ -22,6 +21,12 @@ final class MicRecorder: AudioSource {
             throw DictationError.microphoneUnavailable
         }
 
+        // Must come before anything touches `engine.inputNode`. Without a
+        // granted microphone, AVAudioEngine does not fail — it starts happily
+        // and delivers a stream of zeroes, so the user would see the panel, the
+        // timer and a flat waveform, then get silence with no error at all.
+        try checkMicrophoneAccess()
+
         teardown()
 
         samplesLock.withLock {
@@ -30,6 +35,13 @@ final class MicRecorder: AudioSource {
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
+
+        // With no usable input device the node reports a degenerate 0 Hz format.
+        // Caught here because `installTap` with such a format raises an
+        // Objective-C exception, which Swift cannot catch — it takes the app down.
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw DictationError.microphoneUnavailable
+        }
 
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -40,13 +52,18 @@ final class MicRecorder: AudioSource {
             throw DictationError.microphoneUnavailable
         }
 
-        converter = AVAudioConverter(from: inputFormat, to: targetFormat)
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw DictationError.microphoneUnavailable
+        }
 
         engine.prepare()
         try engine.start()
 
+        // The converter is captured by the tap rather than stored on `self`: it
+        // is used only from the tap thread, and a stored property would be
+        // written here on the main thread while being read there.
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.append(buffer, target: targetFormat)
+            self?.append(buffer, converter: converter, target: targetFormat)
         }
         tapInstalled = true
         log.info("Recording started at \(inputFormat.sampleRate) Hz")
@@ -76,12 +93,30 @@ final class MicRecorder: AudioSource {
         if engine.isRunning {
             engine.stop()
         }
-        converter = nil
     }
 
-    private func append(_ buffer: AVAudioPCMBuffer, target: AVAudioFormat) {
-        guard let converter else { return }
+    /// Throws unless the microphone is ours to use. On a first run this also
+    /// raises the system dialog — asynchronously, so this attempt cannot record
+    /// either way and says so instead of pretending to.
+    private func checkMicrophoneAccess() throws {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return
+        case .notDetermined:
+            log.info("Microphone access not determined yet, prompting")
+            AVCaptureDevice.requestAccess(for: .audio) { [log] granted in
+                log.info("Microphone access \(granted ? "granted" : "denied")")
+            }
+            throw DictationError.microphonePermissionNeeded
+        case .denied, .restricted:
+            log.error("Microphone access denied")
+            throw DictationError.microphoneUnavailable
+        @unknown default:
+            throw DictationError.microphoneUnavailable
+        }
+    }
 
+    private func append(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter, target: AVAudioFormat) {
         let ratio = target.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
         guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }

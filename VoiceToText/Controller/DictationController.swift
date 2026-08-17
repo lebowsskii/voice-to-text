@@ -79,7 +79,10 @@ final class DictationController {
             startedAt = Date()
         } catch {
             log.error("Could not start recording: \(error.localizedDescription)")
-            lastError = DictationError.microphoneUnavailable.message
+            // Keep the source's own diagnosis when it has one — it can tell
+            // "answer the permission dialog" apart from "check your settings",
+            // which a blanket `microphoneUnavailable` here would flatten away.
+            lastError = (error as? DictationError ?? .microphoneUnavailable).message
             reset()
         }
     }
