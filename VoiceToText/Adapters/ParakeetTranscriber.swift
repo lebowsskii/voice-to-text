@@ -7,6 +7,8 @@ import os
 final class ParakeetTranscriber: Transcriber {
 
     private var manager: AsrManager?
+    private var prepareTask: Task<Void, Error>?
+    private let prepareLock = NSLock()
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "parakeet")
 
     /// Where FluidAudio keeps its CoreML models.
@@ -20,14 +22,40 @@ final class ParakeetTranscriber: Transcriber {
     /// Downloads the model on first run and loads it into memory. Call once at
     /// launch — the first call can take minutes on a slow connection.
     func prepare() async throws {
-        guard manager == nil else { return }
+        var task: Task<Void, Error>?
+        var isNewTask = false
 
-        try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+        prepareLock.withLock {
+            if let existing = prepareTask {
+                task = existing
+                isNewTask = false
+            } else {
+                let newTask = Task {
+                    try FileManager.default.createDirectory(at: self.modelsDirectory, withIntermediateDirectories: true)
 
-        log.info("Loading Parakeet v3 from \(self.modelsDirectory.path)")
-        let models = try await AsrModels.load(from: modelsDirectory, version: .v3)
-        manager = AsrManager(models: models)
-        log.info("Parakeet v3 ready")
+                    self.log.info("Loading Parakeet v3 from \(self.modelsDirectory.path)")
+                    let models = try await AsrModels.load(from: self.modelsDirectory, version: .v3)
+                    self.manager = AsrManager(models: models)
+                    self.log.info("Parakeet v3 ready")
+                }
+                prepareTask = newTask
+                task = newTask
+                isNewTask = true
+            }
+        }
+
+        guard let task else { return }
+
+        do {
+            try await task.value
+        } catch {
+            if isNewTask {
+                prepareLock.withLock {
+                    prepareTask = nil
+                }
+            }
+            throw error
+        }
     }
 
     func transcribe(_ clip: AudioClip) async throws -> String {

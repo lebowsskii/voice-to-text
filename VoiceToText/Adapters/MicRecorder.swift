@@ -13,10 +13,18 @@ final class MicRecorder: AudioSource {
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private var samples: [Float] = []
+    private let samplesLock = NSLock()
+    private var tapInstalled = false
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "recorder")
 
     func start() throws {
-        samples.removeAll(keepingCapacity: true)
+        guard !engine.isRunning else {
+            throw DictationError.microphoneUnavailable
+        }
+
+        samplesLock.withLock {
+            samples.removeAll(keepingCapacity: true)
+        }
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
@@ -32,30 +40,38 @@ final class MicRecorder: AudioSource {
 
         converter = AVAudioConverter(from: inputFormat, to: targetFormat)
 
+        engine.prepare()
+        try engine.start()
+
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.append(buffer, target: targetFormat)
         }
-
-        engine.prepare()
-        try engine.start()
+        tapInstalled = true
         log.info("Recording started at \(inputFormat.sampleRate) Hz")
     }
 
     func stop() -> AudioClip {
         teardown()
-        let clip = AudioClip(samples: samples, sampleRate: Self.targetSampleRate)
-        log.info("Recording stopped, \(clip.duration, format: .fixed(precision: 1)) s captured")
-        return clip
+        let result = samplesLock.withLock {
+            AudioClip(samples: samples, sampleRate: Self.targetSampleRate)
+        }
+        log.info("Recording stopped, \(result.duration, format: .fixed(precision: 1)) s captured")
+        return result
     }
 
     func cancel() {
         teardown()
-        samples.removeAll()
+        samplesLock.withLock {
+            samples.removeAll()
+        }
     }
 
     private func teardown() {
         guard engine.isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
+        if tapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
         engine.stop()
         converter = nil
     }
@@ -87,7 +103,10 @@ final class MicRecorder: AudioSource {
         guard let channel = converted.floatChannelData?[0] else { return }
         let frames = Int(converted.frameLength)
         let chunk = Array(UnsafeBufferPointer(start: channel, count: frames))
-        samples.append(contentsOf: chunk)
+
+        samplesLock.withLock {
+            samples.append(contentsOf: chunk)
+        }
 
         report(level: chunk)
     }
