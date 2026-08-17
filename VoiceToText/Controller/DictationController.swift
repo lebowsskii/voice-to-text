@@ -45,6 +45,10 @@ final class DictationController {
         case .idle:
             start()
         case .recording:
+            // Flip synchronously, before the background task even exists, so a
+            // `cancel()` that lands in the same run loop turn sees `.transcribing`
+            // and takes the right branch instead of falling through to `.recording`.
+            state = .transcribing
             finishTask = Task { await finish() }
         case .transcribing:
             break  // already working; ignore
@@ -81,8 +85,10 @@ final class DictationController {
     }
 
     private func finish() async {
+        // `state` is already `.transcribing` — `toggle()` set it before this task
+        // was even created, so a `cancel()` racing with the transcription always
+        // observes it and resets us to `.idle` on its own, synchronously.
         let clip = audio.stop()
-        state = .transcribing
 
         do {
             let text = try await transcriber.transcribe(clip)
@@ -94,9 +100,15 @@ final class DictationController {
                 try inserter.insert(trimmed)
             }
         } catch let error as DictationError {
+            // A cancellation that raced us here already put the controller back
+            // to `.idle` via `cancel()`. Don't resurrect it with an error the
+            // user never caused, and don't clobber whatever dictation may have
+            // started in the meantime.
+            guard !Task.isCancelled else { return }
             log.error("Dictation failed: \(error.message)")
             lastError = error.message
         } catch {
+            guard !Task.isCancelled else { return }
             log.error("Dictation failed: \(error.localizedDescription)")
             lastError = DictationError.transcriptionFailed(error.localizedDescription).message
         }
@@ -108,6 +120,7 @@ final class DictationController {
         state = .idle
         startedAt = nil
         level = 0
+        finishTask = nil
     }
 
     /// Called by the panel once the user has had time to read the error.
@@ -121,5 +134,10 @@ final class DictationController {
         toggle()
         await finishTask?.value
     }
+
+    /// Exposes the in-flight finish task so tests can capture a reference to it
+    /// before calling `cancel()` (which clears it via `reset()`), and later await
+    /// its completion deterministically instead of guessing at scheduling order.
+    var finishTaskForTesting: Task<Void, Never>? { finishTask }
     #endif
 }

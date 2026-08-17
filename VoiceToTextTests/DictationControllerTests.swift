@@ -135,4 +135,49 @@ struct DictationControllerTests {
         controller.dismissError()
         #expect(controller.lastError == nil)
     }
+
+    @Test("cancelling while transcribing does not insert the result")
+    func cancelDuringTranscribingSkipsInsert() async {
+        let audio = FakeAudioSource()
+        let transcriber = SuspendableFakeTranscriber()
+        let inserter = FakeTextInserter()
+        let controller = DictationController(audio: audio, transcriber: transcriber, inserter: inserter)
+
+        controller.toggle()  // idle -> recording
+        controller.toggle()  // recording -> transcribing, kicks off finish()
+        let finishTask = controller.finishTaskForTesting
+
+        await transcriber.waitUntilStarted()
+        #expect(controller.state == .transcribing)
+
+        controller.cancel()
+        #expect(controller.state == .idle)
+
+        transcriber.resume(with: .success("hello"))
+        await finishTask?.value
+
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test("cancelling while transcribing suppresses a subsequent transcription failure")
+    func cancelDuringTranscribingSuppressesFailure() async {
+        let audio = FakeAudioSource()
+        let transcriber = SuspendableFakeTranscriber()
+        let inserter = FakeTextInserter()
+        let controller = DictationController(audio: audio, transcriber: transcriber, inserter: inserter)
+
+        controller.toggle()  // idle -> recording
+        controller.toggle()  // recording -> transcribing, kicks off finish()
+        let finishTask = controller.finishTaskForTesting
+
+        await transcriber.waitUntilStarted()
+
+        controller.cancel()
+        #expect(controller.state == .idle)
+
+        transcriber.resume(with: .failure(DictationError.transcriptionFailed("model died")))
+        await finishTask?.value
+
+        #expect(controller.lastError == nil)
+    }
 }

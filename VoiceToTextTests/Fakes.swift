@@ -34,6 +34,47 @@ final class FakeTranscriber: Transcriber {
     }
 }
 
+/// A transcriber whose `transcribe(_:)` call suspends until the test calls
+/// `resume(with:)`, so a test can call `cancel()` on the controller while a
+/// transcription is genuinely in flight instead of guessing at timing.
+///
+/// This is a deliberate departure from the original Task 3 brief, authorized
+/// by review ruling: covering "cancel on every step" per the design spec
+/// requires a transcriber that can be paused mid-call.
+final class SuspendableFakeTranscriber: Transcriber {
+    private(set) var receivedClips: [AudioClip] = []
+
+    private var startContinuation: CheckedContinuation<Void, Never>?
+    private var resumeContinuation: CheckedContinuation<Void, Never>?
+    private var result: Result<String, Error> = .success("hello world")
+
+    func transcribe(_ clip: AudioClip) async throws -> String {
+        receivedClips.append(clip)
+        startContinuation?.resume()
+        startContinuation = nil
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            resumeContinuation = continuation
+        }
+
+        return try result.get()
+    }
+
+    /// Suspends until `transcribe(_:)` has been called and is waiting on `resume(with:)`.
+    func waitUntilStarted() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            startContinuation = continuation
+        }
+    }
+
+    /// Lets the suspended `transcribe(_:)` call return (or throw) the given result.
+    func resume(with result: Result<String, Error>) {
+        self.result = result
+        resumeContinuation?.resume()
+        resumeContinuation = nil
+    }
+}
+
 final class FakeTextInserter: TextInserter {
     var insertError: Error?
     private(set) var inserted: [String] = []
