@@ -61,8 +61,16 @@ struct VoiceToTextApp: App {
                         controller.cancel()
                     }
                 }
-                .onChange(of: controller.state) { _, newState in
-                    updatePanel()
+                .onChange(of: controller.state) { _, _ in updatePanel() }
+                // The Esc gate lives in KeyboardShortcuts' global state but is
+                // maintained from here, so it outlives this view while the
+                // observation that keeps it honest does not. `initial: true`
+                // re-syncs the gate every time the label view is created: if a
+                // dictation ends while no view exists to see the transition,
+                // the replacement view would otherwise inherit `.idle` as its
+                // baseline, never fire, and leave Esc registered at rest —
+                // silently stealing Esc system-wide for the rest of the session.
+                .onChange(of: controller.state, initial: true) { _, newState in
                     updateCancelShortcut(for: newState)
                 }
                 .onChange(of: controller.lastError) { _, error in
@@ -110,9 +118,12 @@ struct VoiceToTextApp: App {
 
     /// Registers the global Esc hotkey only while a dictation is actually in
     /// flight, so it never steals Esc from other apps at rest. `.idle` covers
-    /// all three ways a dictation ends — insert, cancel, error — since
-    /// `DictationController` funnels every exit path through the same
-    /// `reset()` that sets `state = .idle`.
+    /// all three ways a dictation ends — insert, cancel, error — because every
+    /// exit path in `DictationController` either runs `reset()`, which sets
+    /// `state = .idle`, or is reachable only after `cancel()` already ran it.
+    /// (The `Task.isCancelled` early returns in `finish()` are the latter kind.)
+    /// A future change that cancels `finishTask` from anywhere but `cancel()`
+    /// would break that precondition — and with it this gate.
     @MainActor
     private func updateCancelShortcut(for state: DictationController.State) {
         switch state {
