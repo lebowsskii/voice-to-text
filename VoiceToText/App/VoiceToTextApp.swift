@@ -5,6 +5,7 @@ import SwiftUI
 struct VoiceToTextApp: App {
 
     @State private var controller: DictationController
+    @State private var panel: RecordingPanelController?
     private let parakeet: ParakeetTranscriber
 
     init() {
@@ -43,6 +44,30 @@ struct VoiceToTextApp: App {
                         controller.toggle()
                     }
                 }
+                .onChange(of: controller.state) { _, _ in updatePanel() }
+                .onChange(of: controller.lastError) { _, error in
+                    updatePanel()
+                    guard error != nil else { return }
+                    // Give the user time to read it, then get out of the way.
+                    Task {
+                        try? await Task.sleep(for: .seconds(6))
+                        controller.dismissError()
+                    }
+                }
+        }
+    }
+
+    /// The panel is visible whenever something is happening — a dictation in
+    /// progress, or an error the user has not seen yet.
+    @MainActor
+    private func updatePanel() {
+        let panel = panel ?? RecordingPanelController(controller: controller)
+        self.panel = panel
+
+        if controller.state == .idle && controller.lastError == nil {
+            panel.hide()
+        } else {
+            panel.show()
         }
     }
 }
