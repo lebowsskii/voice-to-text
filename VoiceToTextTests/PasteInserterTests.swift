@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 import Foundation
 @testable import VoiceToText
@@ -8,12 +9,15 @@ final class FakePasteboard: Pasteboarding {
 
     func snapshot() -> PasteboardSnapshot {
         snapshots += 1
-        return PasteboardSnapshot(items: [:], plainText: contents)
+        return PasteboardSnapshot(items: [[.string: Data(contents.utf8)]])
     }
 
     func write(_ text: String) { contents = text }
 
-    func restore(_ snapshot: PasteboardSnapshot) { contents = snapshot.plainText ?? "" }
+    func restore(_ snapshot: PasteboardSnapshot) {
+        contents = snapshot.items.first?[.string]
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    }
 }
 
 final class FakeAccessibility: AccessibilityChecking {

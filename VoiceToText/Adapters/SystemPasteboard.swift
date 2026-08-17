@@ -4,8 +4,12 @@ import Foundation
 
 /// Everything the app saved from the user's clipboard before overwriting it.
 struct PasteboardSnapshot {
-    let items: [NSPasteboard.PasteboardType: Data]
-    let plainText: String?
+    /// One entry per `NSPasteboardItem`, each mapping every type that item
+    /// carried to its data. A list rather than a single dictionary because the
+    /// clipboard can hold several items at once — two images copied together,
+    /// say — and the pasteboard-level `types`/`data(forType:)` API only ever
+    /// sees the first one, so restoring from it silently drops the rest.
+    let items: [[NSPasteboard.PasteboardType: Data]]
 }
 
 protocol Pasteboarding {
@@ -28,29 +32,39 @@ protocol RestoreScheduling {
 }
 
 struct SystemPasteboard: Pasteboarding {
+    /// Injectable so tests can run against a private pasteboard instead of
+    /// trampling the real clipboard of whoever is running them.
+    private let pasteboard: NSPasteboard
+
+    init(pasteboard: NSPasteboard = .general) {
+        self.pasteboard = pasteboard
+    }
+
     func snapshot() -> PasteboardSnapshot {
-        let pasteboard = NSPasteboard.general
-        var items: [NSPasteboard.PasteboardType: Data] = [:]
-        for type in pasteboard.types ?? [] {
-            if let data = pasteboard.data(forType: type) {
-                items[type] = data
+        let items = (pasteboard.pasteboardItems ?? []).map { item in
+            item.types.reduce(into: [NSPasteboard.PasteboardType: Data]()) { byType, type in
+                byType[type] = item.data(forType: type)
             }
         }
-        return PasteboardSnapshot(items: items, plainText: pasteboard.string(forType: .string))
+        return PasteboardSnapshot(items: items)
     }
 
     func write(_ text: String) {
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
     }
 
     func restore(_ snapshot: PasteboardSnapshot) {
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        for (type, data) in snapshot.items {
-            pasteboard.setData(data, forType: type)
-        }
+        guard !snapshot.items.isEmpty else { return }
+
+        pasteboard.writeObjects(snapshot.items.map { byType in
+            let item = NSPasteboardItem()
+            for (type, data) in byType {
+                item.setData(data, forType: type)
+            }
+            return item
+        })
     }
 }
 
