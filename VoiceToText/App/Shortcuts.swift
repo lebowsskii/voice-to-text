@@ -6,4 +6,9 @@ extension KeyboardShortcuts.Name {
         "toggleDictation",
         initial: .init(.z, modifiers: [.command, .option])
     )
+
+    static let cancelDictation = Self(
+        "cancelDictation",
+        initial: .init(.escape)
+    )
 }

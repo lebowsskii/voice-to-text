@@ -48,6 +48,11 @@ struct VoiceToTextApp: App {
                         controller.toggle()
                     }
                 }
+                .task {
+                    for await _ in KeyboardShortcuts.events(.keyUp, for: .cancelDictation) {
+                        controller.cancel()
+                    }
+                }
                 .onChange(of: controller.state) { _, _ in updatePanel() }
                 .onChange(of: controller.lastError) { _, error in
                     updatePanel()
