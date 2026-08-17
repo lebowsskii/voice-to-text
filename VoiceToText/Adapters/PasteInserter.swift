@@ -44,7 +44,11 @@ final class PasteInserter: TextInserter {
             throw DictationError.accessibilityDenied
         }
 
-        pendingSnapshot = saved
+        // If we already have a pending snapshot, keep it—it's the true original.
+        // Only save the snapshot on the first insert.
+        if pendingSnapshot == nil {
+            pendingSnapshot = saved
+        }
         keystrokes.sendPaste()
 
         scheduler.schedule(after: restoreDelay) { [weak self] in

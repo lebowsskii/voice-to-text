@@ -114,4 +114,18 @@ struct PasteInserterTests {
 
         #expect(pasteboard.contents == "user's original clipboard")
     }
+
+    @Test("successive inserts without flush preserve the original clipboard")
+    func successiveInsertsPreserveOriginal() throws {
+        let (inserter, pasteboard, _, _, scheduler) = make()
+
+        try inserter.insert("first text")
+        #expect(pasteboard.contents == "first text")
+
+        try inserter.insert("second text")
+        #expect(pasteboard.contents == "second text")
+
+        scheduler.fire()
+        #expect(pasteboard.contents == "user's original clipboard")
+    }
 }
