@@ -67,12 +67,13 @@ final class MicRecorder: AudioSource {
     }
 
     private func teardown() {
-        guard engine.isRunning else { return }
         if tapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             tapInstalled = false
         }
-        engine.stop()
+        if engine.isRunning {
+            engine.stop()
+        }
         converter = nil
     }
 

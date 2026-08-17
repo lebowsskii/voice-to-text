@@ -22,13 +22,9 @@ final class ParakeetTranscriber: Transcriber {
     /// Downloads the model on first run and loads it into memory. Call once at
     /// launch — the first call can take minutes on a slow connection.
     func prepare() async throws {
-        var task: Task<Void, Error>?
-        var isNewTask = false
-
-        prepareLock.withLock {
+        let (task, isNewTask) = prepareLock.withLock { () -> (Task<Void, Error>, Bool) in
             if let existing = prepareTask {
-                task = existing
-                isNewTask = false
+                return (existing, false)
             } else {
                 let newTask = Task {
                     try FileManager.default.createDirectory(at: self.modelsDirectory, withIntermediateDirectories: true)
@@ -39,12 +35,9 @@ final class ParakeetTranscriber: Transcriber {
                     self.log.info("Parakeet v3 ready")
                 }
                 prepareTask = newTask
-                task = newTask
-                isNewTask = true
+                return (newTask, true)
             }
         }
-
-        guard let task else { return }
 
         do {
             try await task.value
