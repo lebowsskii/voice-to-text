@@ -47,10 +47,14 @@ struct VoiceToTextApp: App {
                 .onChange(of: controller.state) { _, _ in updatePanel() }
                 .onChange(of: controller.lastError) { _, error in
                     updatePanel()
-                    guard error != nil else { return }
-                    // Give the user time to read it, then get out of the way.
+                    guard let error else { return }
+                    // Give the user time to read it, then get out of the way —
+                    // but only if `error` is still the error on screen. A newer
+                    // one (or a manual dismiss) must not be cut short by a timer
+                    // that was started for a message the user already saw.
                     Task {
                         try? await Task.sleep(for: .seconds(6))
+                        guard controller.lastError == error else { return }
                         controller.dismissError()
                     }
                 }
@@ -61,13 +65,18 @@ struct VoiceToTextApp: App {
     /// progress, or an error the user has not seen yet.
     @MainActor
     private func updatePanel() {
-        let panel = panel ?? RecordingPanelController(controller: controller)
-        self.panel = panel
+        let resolvedPanel: RecordingPanelController
+        if let panel {
+            resolvedPanel = panel
+        } else {
+            resolvedPanel = RecordingPanelController(controller: controller)
+            panel = resolvedPanel
+        }
 
         if controller.state == .idle && controller.lastError == nil {
-            panel.hide()
+            resolvedPanel.hide()
         } else {
-            panel.show()
+            resolvedPanel.show()
         }
     }
 }
