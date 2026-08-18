@@ -10,13 +10,26 @@ final class WhisperTranscriber: LocalTranscriber {
 
     /// Setting this replays `currentState` immediately (see the
     /// `LocalTranscriber` doc comment for why).
+    ///
+    /// Lock-guarded because the write comes from the main thread (the Settings
+    /// view appearing) while `replayCurrentState` reads it from whatever queue
+    /// WhisperKit runs its progress callback on.
     var onStateChange: ((ModelState) -> Void)? {
-        didSet { replayCurrentState() }
+        get { prepareLock.withLock { _onStateChange } }
+        set {
+            prepareLock.withLock { _onStateChange = newValue }
+            replayCurrentState()
+        }
     }
 
-    /// All four are guarded by `prepareLock`: they are written from the load
+    var state: ModelState {
+        prepareLock.withLock { currentState }
+    }
+
+    /// All five are guarded by `prepareLock`: they are written from the load
     /// task (or `report`, called from the download's progress callback) and
     /// read from whatever context calls `transcribe` or sets `onStateChange`.
+    private var _onStateChange: ((ModelState) -> Void)?
     private var whisperKit: WhisperKit?
     private var prepareTask: Task<Void, Error>?
     private var loadFailure: String?
@@ -112,9 +125,17 @@ final class WhisperTranscriber: LocalTranscriber {
         replayCurrentState()
     }
 
+    /// Reads the state *inside* the dispatched block, not before it: two
+    /// `report` calls racing from different threads would otherwise capture
+    /// their states first and could land on the main queue out of order,
+    /// latching the UI on a stale one (a trailing `.downloading` callback
+    /// arriving after `.ready` would leave a progress bar on screen forever).
+    /// Whichever block runs last now reads whatever is true at that moment.
     private func replayCurrentState() {
-        let state = prepareLock.withLock { currentState }
         let handler = onStateChange
-        DispatchQueue.main.async { handler?(state) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            handler?(self.prepareLock.withLock { self.currentState })
+        }
     }
 }

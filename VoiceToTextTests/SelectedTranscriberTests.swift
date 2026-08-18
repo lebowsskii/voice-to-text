@@ -60,4 +60,45 @@ struct SelectedTranscriberTests {
         #expect(parakeet.receivedClips.count == 1)
         #expect(whisper.receivedClips.count == 1)
     }
+
+    @Test("prepares the selected engine before transcribing when its files are already on disk")
+    func preparesDownloadedEngineBeforeTranscribing() async throws {
+        let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
+        // Files on disk, not yet loaded into memory — the state an engine is in
+        // after the user switches to it mid-session.
+        parakeet.state = .ready
+        let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let settings = freshSettings(engine: .parakeet)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+
+        _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
+
+        #expect(parakeet.prepareCallCount == 1)
+    }
+
+    @Test("never prepares an engine that isn't downloaded — no accidental multi-minute download")
+    func doesNotPrepareUndownloadedEngine() async throws {
+        let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
+        parakeet.state = .notDownloaded
+        let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let settings = freshSettings(engine: .parakeet)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+
+        _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
+
+        #expect(parakeet.prepareCallCount == 0)
+    }
+
+    @Test("never prepares the engine that isn't selected")
+    func doesNotPrepareUnselectedEngine() async throws {
+        let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
+        let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        whisper.state = .ready
+        let settings = freshSettings(engine: .parakeet)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+
+        _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
+
+        #expect(whisper.prepareCallCount == 0)
+    }
 }

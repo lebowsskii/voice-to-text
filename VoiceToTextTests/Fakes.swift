@@ -78,6 +78,9 @@ final class SuspendableFakeTranscriber: Transcriber {
 final class FakeLocalTranscriber: LocalTranscriber {
     let modelName: String
     var onStateChange: ((ModelState) -> Void)?
+    /// Settable so a test can put the fake in any lifecycle state. Defaults to
+    /// `.ready` — the fake is usable straight away unless a test says otherwise.
+    var state: ModelState = .ready
     var result: Result<String, Error> = .success("hello world")
     private(set) var receivedClips: [AudioClip] = []
     private(set) var prepareCallCount = 0

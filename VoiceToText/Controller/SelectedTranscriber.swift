@@ -16,7 +16,17 @@ final class SelectedTranscriber: Transcriber {
     }
 
     func transcribe(_ clip: AudioClip) async throws -> String {
-        try await current.transcribe(clip)
+        let transcriber = current
+        // Only the engine picked at launch got a `prepare()` call, so the other
+        // one has files on disk but nothing loaded into memory. Preparing here
+        // fixes that — and is idempotent, so a load already in flight is simply
+        // awaited. The guard is the point: a `.notDownloaded` engine must never
+        // start a multi-minute download behind the user's back, that stays
+        // behind the explicit "Download" button in Settings.
+        if transcriber.state != .notDownloaded {
+            try await transcriber.prepare()
+        }
+        return try await transcriber.transcribe(clip)
     }
 
     private var current: any LocalTranscriber {

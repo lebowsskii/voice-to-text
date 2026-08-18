@@ -17,6 +17,10 @@ protocol LocalTranscriber: AnyObject, Transcriber {
     /// it and get stuck showing a stale "not downloaded".
     var onStateChange: ((ModelState) -> Void)? { get set }
 
+    /// Current state, readable synchronously without going through
+    /// `onStateChange` — thread-safe, callable from any context.
+    var state: ModelState { get }
+
     /// Downloads the model if needed and loads it into memory. Idempotent —
     /// safe to call while already in progress or already ready.
     func prepare() async throws
