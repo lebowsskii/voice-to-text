@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		104664213034C65E00FA7260 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 104664203034C65E00FA7260 /* WhisperKit */; };
 		1060E4D330334C2600B4F4E4 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 1060E4D230334C2600B4F4E4 /* FluidAudio */; };
 		1060E4D530334C2600B4F4E4 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = 1060E4D430334C2600B4F4E4 /* KeyboardShortcuts */; };
 /* End PBXBuildFile section */
@@ -44,6 +45,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				104664213034C65E00FA7260 /* WhisperKit in Frameworks */,
 				1060E4D330334C2600B4F4E4 /* FluidAudio in Frameworks */,
 				1060E4D530334C2600B4F4E4 /* KeyboardShortcuts in Frameworks */,
 			);
@@ -107,6 +109,7 @@
 			packageProductDependencies = (
 				1060E4D230334C2600B4F4E4 /* FluidAudio */,
 				1060E4D430334C2600B4F4E4 /* KeyboardShortcuts */,
+				104664203034C65E00FA7260 /* WhisperKit */,
 			);
 			productName = VoiceToText;
 			productReference = 10BAC7403033454400D77568 /* VoiceToText.app */;
@@ -166,6 +169,7 @@
 			packageReferences = (
 				1060E4B73033496800B4F4E4 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				1060E4B830334A2D00B4F4E4 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				103C172A3034C40300AFB8D3 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 10BAC7413033454400D77568 /* Products */;
@@ -478,6 +482,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		103C172A3034C40300AFB8D3 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
 		1060E4B73033496800B4F4E4 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -497,6 +509,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		104664203034C65E00FA7260 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 103C172A3034C40300AFB8D3 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
 		1060E4D230334C2600B4F4E4 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1060E4B73033496800B4F4E4 /* XCRemoteSwiftPackageReference "FluidAudio" */;
