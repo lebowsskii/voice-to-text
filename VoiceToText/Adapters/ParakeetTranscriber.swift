@@ -4,22 +4,43 @@ import os
 
 /// Local speech recognition with Parakeet TDT v3 (25 languages) running on the
 /// Apple Neural Engine.
-final class ParakeetTranscriber: Transcriber {
+final class ParakeetTranscriber: LocalTranscriber {
 
-    /// All three are guarded by `prepareLock`: they are written from the load
-    /// task and read from whatever context calls `transcribe`.
+    let modelName = "Parakeet v3"
+
+    /// Setting this replays `currentState` immediately (see the
+    /// `LocalTranscriber` doc comment for why) — a view that starts
+    /// observing after the model was already downloaded must not see a
+    /// stale `.notDownloaded`.
+    var onStateChange: ((ModelState) -> Void)? {
+        didSet { replayCurrentState() }
+    }
+
+    /// All four are guarded by `prepareLock`: they are written from the load
+    /// task (or `report`, called from the download's progress callback) and
+    /// read from whatever context calls `transcribe` or sets `onStateChange`.
     private var manager: AsrManager?
     private var prepareTask: Task<Void, Error>?
     private var loadFailure: String?
+    private var currentState: ModelState
     private let prepareLock = NSLock()
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "parakeet")
 
-    /// Where FluidAudio keeps its CoreML models.
-    private var modelsDirectory: URL {
+    /// Where FluidAudio keeps its CoreML models. Static because Swift forbids
+    /// referencing any instance computed property through `self` — even one
+    /// that, like this one, doesn't read stored state — until every stored
+    /// property has an initial value, and `init` needs this before
+    /// `currentState` is set.
+    private static var modelsDirectory: URL {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("VoiceToText")
             .appendingPathComponent("Models")
+    }
+
+    init() {
+        let ready = AsrModels.modelsExist(at: Self.modelsDirectory, version: .v3)
+        currentState = ready ? .ready : .notDownloaded
     }
 
     /// Downloads the model on first run and loads it into memory. Call once at
@@ -30,14 +51,21 @@ final class ParakeetTranscriber: Transcriber {
                 return (existing, false)
             } else {
                 let newTask = Task {
-                    try FileManager.default.createDirectory(at: self.modelsDirectory, withIntermediateDirectories: true)
+                    try FileManager.default.createDirectory(at: Self.modelsDirectory, withIntermediateDirectories: true)
 
-                    self.log.info("Loading Parakeet v3 from \(self.modelsDirectory.path)")
-                    let models = try await AsrModels.load(from: self.modelsDirectory, version: .v3)
+                    self.log.info("Loading Parakeet v3 from \(Self.modelsDirectory.path)")
+                    let models = try await AsrModels.load(
+                        from: Self.modelsDirectory,
+                        version: .v3,
+                        progressHandler: { [weak self] progress in
+                            self?.reportDownloadProgress(progress)
+                        }
+                    )
                     self.prepareLock.withLock {
                         self.manager = AsrManager(models: models)
                     }
                     self.log.info("Parakeet v3 ready")
+                    self.report(.ready)
                 }
                 prepareTask = newTask
                 loadFailure = nil
@@ -59,6 +87,7 @@ final class ParakeetTranscriber: Transcriber {
                     prepareTask = nil
                 }
             }
+            report(.failed(error.localizedDescription))
             throw error
         }
     }
@@ -83,5 +112,25 @@ final class ParakeetTranscriber: Transcriber {
         } catch {
             throw DictationError.transcriptionFailed(error.localizedDescription)
         }
+    }
+
+    private func reportDownloadProgress(_ progress: DownloadProgress) {
+        switch progress.phase {
+        case .listing, .downloading:
+            report(.downloading(progress: progress.fractionCompleted))
+        case .compiling:
+            report(.loading)
+        }
+    }
+
+    private func report(_ state: ModelState) {
+        prepareLock.withLock { currentState = state }
+        replayCurrentState()
+    }
+
+    private func replayCurrentState() {
+        let state = prepareLock.withLock { currentState }
+        let handler = onStateChange
+        DispatchQueue.main.async { handler?(state) }
     }
 }
