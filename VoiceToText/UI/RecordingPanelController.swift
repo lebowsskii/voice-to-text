@@ -24,12 +24,6 @@ final class RecordingPanelController {
         let panel = panel ?? makePanel()
         self.panel = panel
 
-        // The hosting controller resizes the window to fit the SwiftUI content,
-        // so this has to run after that has settled.
-        DispatchQueue.main.async { [weak self] in
-            self?.position(panel)
-        }
-
         position(panel)
         panel.orderFrontRegardless()
     }
@@ -41,7 +35,6 @@ final class RecordingPanelController {
 
     private func makePanel() -> NSPanel {
         let hosting = NSHostingController(rootView: RecordingPanelView(controller: controller))
-        hosting.sizingOptions = [.preferredContentSize]
 
         let panel = NonActivatingPanel(
             contentRect: .zero,
@@ -59,14 +52,21 @@ final class RecordingPanelController {
         return panel
     }
 
+    /// Sizes and centres the panel from the content ourselves rather than via
+    /// `NSHostingController.sizingOptions = [.preferredContentSize]`: that
+    /// option drives an animated window resize (`NSHostingView.
+    /// updateAnimatedWindowSize`) that, on a shape change as large as spinner
+    /// -> error pill, re-enters `windowDidLayout` before the previous pass has
+    /// settled and recurses until CoreAutoLayout overflows the stack.
     private func position(_ panel: NSPanel) {
         guard let screen = NSScreen.main else { return }
         let visible = screen.visibleFrame
-        let size = panel.frame.size
-        panel.setFrameOrigin(.init(
+        let size = panel.contentViewController?.view.fittingSize ?? panel.frame.size
+        let origin = CGPoint(
             x: visible.midX - size.width / 2,
             y: visible.minY + bottomInset
-        ))
+        )
+        panel.setFrame(CGRect(origin: origin, size: size), display: true)
     }
 }
 
