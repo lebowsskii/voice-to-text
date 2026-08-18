@@ -5,21 +5,31 @@ import SwiftUI
 struct VoiceToTextApp: App {
 
     @State private var controller: DictationController
+    @State private var settings: SettingsState
     @State private var panel: RecordingPanelController?
     /// Auto-dismiss timer for the currently shown error. Re-created (and the
     /// old one cancelled) every time `lastError` changes, so a stale timer
     /// from a previous error can never dismiss the one currently on screen.
     @State private var errorDismissTask: Task<Void, Never>?
     private let parakeet: ParakeetTranscriber
+    private let whisper: WhisperTranscriber
 
     init() {
         // The composition root: the one place that picks concrete adapters.
         // Everything below this line only ever sees the Core protocols.
+        let settings = SettingsState(store: SettingsStore())
+        self._settings = State(initialValue: settings)
+
         let parakeet = ParakeetTranscriber()
+        let whisper = WhisperTranscriber()
         self.parakeet = parakeet
+        self.whisper = whisper
+
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+
         _controller = State(initialValue: DictationController(
             audio: MicRecorder(),
-            transcriber: parakeet,
+            transcriber: selected,
             inserter: PasteInserter(
                 pasteboard: SystemPasteboard(),
                 accessibility: SystemAccessibility(),
@@ -41,16 +51,24 @@ struct VoiceToTextApp: App {
         MenuBarExtra {
             Text("Press ⌘⌥Z to dictate")
             Divider()
+            SettingsLink {
+                Text("Settings…")
+            }
+            Divider()
             Button("Quit VoiceToText") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
             MenuBarLabel(state: controller.state)
                 .task {
-                    // Downloads the model on first run; later launches just load it.
-                    // Discarding the error is safe only because `prepare()` logs
-                    // it and every later `transcribe()` reports it — there is no
-                    // UI at launch to show it in.
-                    try? await parakeet.prepare()
+                    // Downloads the selected model on first run; later launches
+                    // just load it. Discarding the error is safe only because
+                    // `prepare()` reports it via `onStateChange`/logs and every
+                    // later `transcribe()` reports it too — there is no UI at
+                    // launch to show it in.
+                    switch settings.selectedEngine {
+                    case .parakeet: try? await parakeet.prepare()
+                    case .whisper: try? await whisper.prepare()
+                    }
                 }
                 .task {
                     // KeyboardShortcuts 3.x: `events(for:)` replaces the legacy
@@ -97,6 +115,10 @@ struct VoiceToTextApp: App {
                         controller.dismissError()
                     }
                 }
+        }
+
+        Settings {
+            SettingsWindow(parakeet: parakeet, whisper: whisper, settings: settings)
         }
     }
 
