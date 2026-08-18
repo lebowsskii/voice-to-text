@@ -75,6 +75,27 @@ final class SuspendableFakeTranscriber: Transcriber {
     }
 }
 
+final class FakeLocalTranscriber: LocalTranscriber {
+    let modelName: String
+    var onStateChange: ((ModelState) -> Void)?
+    var result: Result<String, Error> = .success("hello world")
+    private(set) var receivedClips: [AudioClip] = []
+    private(set) var prepareCallCount = 0
+
+    init(modelName: String) {
+        self.modelName = modelName
+    }
+
+    func transcribe(_ clip: AudioClip) async throws -> String {
+        receivedClips.append(clip)
+        return try result.get()
+    }
+
+    func prepare() async throws {
+        prepareCallCount += 1
+    }
+}
+
 final class FakeTextInserter: TextInserter {
     var insertError: Error?
     private(set) var inserted: [String] = []
