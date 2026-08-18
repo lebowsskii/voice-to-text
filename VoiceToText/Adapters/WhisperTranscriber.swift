@@ -4,13 +4,23 @@ import os
 
 /// Local speech recognition with Whisper Large v3 Turbo running on the Apple
 /// Neural Engine, via WhisperKit.
-final class WhisperTranscriber: Transcriber {
+final class WhisperTranscriber: LocalTranscriber {
 
-    /// All three are guarded by `prepareLock`: they are written from the load
-    /// task and read from whatever context calls `transcribe`.
+    let modelName = "Whisper Large v3 Turbo"
+
+    /// Setting this replays `currentState` immediately (see the
+    /// `LocalTranscriber` doc comment for why).
+    var onStateChange: ((ModelState) -> Void)? {
+        didSet { replayCurrentState() }
+    }
+
+    /// All four are guarded by `prepareLock`: they are written from the load
+    /// task (or `report`, called from the download's progress callback) and
+    /// read from whatever context calls `transcribe` or sets `onStateChange`.
     private var whisperKit: WhisperKit?
     private var prepareTask: Task<Void, Error>?
     private var loadFailure: String?
+    private var currentState: ModelState = .notDownloaded
     private let prepareLock = NSLock()
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "whisper")
 
@@ -29,23 +39,27 @@ final class WhisperTranscriber: Transcriber {
                 let newTask = Task {
                     self.log.info("Downloading Whisper Large v3 Turbo")
                     var loggedPercent = -1
-                    let modelFolder = try await WhisperKit.download(variant: Self.modelVariant) { progress in
+                    let modelFolder = try await WhisperKit.download(variant: Self.modelVariant) { [weak self] progress in
+                        self?.report(.downloading(progress: progress.fractionCompleted))
+
                         let percent = Int(progress.fractionCompleted * 100)
                         // fractionCompleted fires many times per second; only log
                         // on each new 10% step so this doesn't flood the log.
                         if percent / 10 != loggedPercent / 10 {
                             loggedPercent = percent
-                            self.log.info("Downloading Whisper Large v3 Turbo: \(percent)%")
+                            self?.log.info("Downloading Whisper Large v3 Turbo: \(percent)%")
                         }
                     }
 
                     self.log.info("Loading Whisper Large v3 Turbo")
+                    self.report(.loading)
                     let config = WhisperKitConfig(model: Self.modelVariant, modelFolder: modelFolder.path, load: true)
                     let kit = try await WhisperKit(config)
                     self.prepareLock.withLock {
                         self.whisperKit = kit
                     }
                     self.log.info("Whisper Large v3 Turbo ready")
+                    self.report(.ready)
                 }
                 prepareTask = newTask
                 loadFailure = nil
@@ -67,6 +81,7 @@ final class WhisperTranscriber: Transcriber {
                     prepareTask = nil
                 }
             }
+            report(.failed(error.localizedDescription))
             throw error
         }
     }
@@ -90,5 +105,16 @@ final class WhisperTranscriber: Transcriber {
         } catch {
             throw DictationError.transcriptionFailed(error.localizedDescription)
         }
+    }
+
+    private func report(_ state: ModelState) {
+        prepareLock.withLock { currentState = state }
+        replayCurrentState()
+    }
+
+    private func replayCurrentState() {
+        let state = prepareLock.withLock { currentState }
+        let handler = onStateChange
+        DispatchQueue.main.async { handler?(state) }
     }
 }
