@@ -19,8 +19,9 @@ struct SelectedTranscriberTests {
         let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
         parakeet.result = .success("from parakeet")
         let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let gemini = FakeTranscriber()
         let settings = freshSettings(engine: .parakeet)
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         let clip = AudioClip(samples: [0.1], sampleRate: 16_000)
         let text = try await selected.transcribe(clip)
@@ -28,6 +29,7 @@ struct SelectedTranscriberTests {
         #expect(text == "from parakeet")
         #expect(parakeet.receivedClips == [clip])
         #expect(whisper.receivedClips.isEmpty)
+        #expect(gemini.receivedClips.isEmpty)
     }
 
     @Test("routes to Whisper when Whisper is selected")
@@ -35,8 +37,9 @@ struct SelectedTranscriberTests {
         let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
         let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
         whisper.result = .success("from whisper")
+        let gemini = FakeTranscriber()
         let settings = freshSettings(engine: .whisper)
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         let clip = AudioClip(samples: [0.1], sampleRate: 16_000)
         let text = try await selected.transcribe(clip)
@@ -44,14 +47,48 @@ struct SelectedTranscriberTests {
         #expect(text == "from whisper")
         #expect(whisper.receivedClips == [clip])
         #expect(parakeet.receivedClips.isEmpty)
+        #expect(gemini.receivedClips.isEmpty)
+    }
+
+    @Test("routes to Gemini when Gemini is selected")
+    func routesToGemini() async throws {
+        let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
+        let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let gemini = FakeTranscriber()
+        gemini.result = .success("from gemini")
+        let settings = freshSettings(engine: .gemini)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
+
+        let clip = AudioClip(samples: [0.1], sampleRate: 16_000)
+        let text = try await selected.transcribe(clip)
+
+        #expect(text == "from gemini")
+        #expect(gemini.receivedClips == [clip])
+        #expect(parakeet.receivedClips.isEmpty)
+        #expect(whisper.receivedClips.isEmpty)
+    }
+
+    @Test("never prepares either local engine when Gemini is selected")
+    func doesNotPrepareLocalEnginesForGemini() async throws {
+        let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
+        let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let gemini = FakeTranscriber()
+        let settings = freshSettings(engine: .gemini)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
+
+        _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
+
+        #expect(parakeet.prepareCallCount == 0)
+        #expect(whisper.prepareCallCount == 0)
     }
 
     @Test("re-reads selection on every call — switching mid-session takes effect immediately")
     func reReadsSelectionEachCall() async throws {
         let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
         let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let gemini = FakeTranscriber()
         let settings = freshSettings(engine: .parakeet)
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         let clip = AudioClip(samples: [0.1], sampleRate: 16_000)
         _ = try await selected.transcribe(clip)
@@ -69,8 +106,9 @@ struct SelectedTranscriberTests {
         // after the user switches to it mid-session.
         parakeet.state = .ready
         let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let gemini = FakeTranscriber()
         let settings = freshSettings(engine: .parakeet)
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
 
@@ -82,8 +120,9 @@ struct SelectedTranscriberTests {
         let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
         parakeet.state = .notDownloaded
         let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
+        let gemini = FakeTranscriber()
         let settings = freshSettings(engine: .parakeet)
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
 
@@ -95,8 +134,9 @@ struct SelectedTranscriberTests {
         let parakeet = FakeLocalTranscriber(modelName: "Parakeet v3")
         let whisper = FakeLocalTranscriber(modelName: "Whisper Large v3 Turbo")
         whisper.state = .ready
+        let gemini = FakeTranscriber()
         let settings = freshSettings(engine: .parakeet)
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         _ = try await selected.transcribe(AudioClip(samples: [0.1], sampleRate: 16_000))
 

@@ -4,4 +4,5 @@ import Foundation
 enum Engine: String, CaseIterable {
     case parakeet
     case whisper
+    case gemini
 }

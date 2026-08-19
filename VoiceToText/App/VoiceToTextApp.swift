@@ -26,10 +26,11 @@ struct VoiceToTextApp: App {
 
         let parakeet = ParakeetTranscriber()
         let whisper = WhisperTranscriber()
+        let gemini = GeminiTranscriber(apiKeyStore: apiKeyStore, settings: settings)
         self.parakeet = parakeet
         self.whisper = whisper
 
-        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, settings: settings)
+        let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         _controller = State(initialValue: DictationController(
             audio: MicRecorder(),
@@ -68,10 +69,12 @@ struct VoiceToTextApp: App {
                     // just load it. Discarding the error is safe only because
                     // `prepare()` reports it via `onStateChange`/logs and every
                     // later `transcribe()` reports it too — there is no UI at
-                    // launch to show it in.
+                    // launch to show it in. Gemini has nothing to prepare — no
+                    // on-disk model, see `LocalTranscriber.swift`.
                     switch settings.selectedEngine {
                     case .parakeet: try? await parakeet.prepare()
                     case .whisper: try? await whisper.prepare()
+                    case .gemini: break
                     }
                 }
                 .task {
