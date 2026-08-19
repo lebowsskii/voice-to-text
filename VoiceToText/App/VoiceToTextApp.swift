@@ -20,7 +20,8 @@ struct VoiceToTextApp: App {
     init() {
         // The composition root: the one place that picks concrete adapters.
         // Everything below this line only ever sees the Core protocols.
-        let settings = SettingsState(store: SettingsStore())
+        let apiKeyStore = GeminiAPIKeyStore()
+        let settings = SettingsState(store: SettingsStore(), apiKeyStore: apiKeyStore)
         self._settings = State(initialValue: settings)
 
         let parakeet = ParakeetTranscriber()

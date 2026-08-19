@@ -8,7 +8,8 @@ struct SelectedTranscriberTests {
     private func freshSettings(engine: Engine = .parakeet) -> SettingsState {
         let suiteName = "SelectedTranscriberTests.\(UUID().uuidString)"
         let store = SettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
-        let settings = SettingsState(store: store)
+        let apiKeyStore = GeminiAPIKeyStore(service: suiteName)
+        let settings = SettingsState(store: store, apiKeyStore: apiKeyStore)
         settings.selectedEngine = engine
         return settings
     }
