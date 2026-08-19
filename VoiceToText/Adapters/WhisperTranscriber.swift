@@ -8,6 +8,14 @@ final class WhisperTranscriber: LocalTranscriber {
 
     let modelName = "Whisper Large v3 Turbo"
 
+    let metadata = ModelMetadata(
+        family: "WhisperKit",
+        vendor: "Argmax",
+        diskSize: "809 MB",
+        languages: "99 languages",
+        infoURL: URL(string: "https://huggingface.co/openai/whisper-large-v3-turbo")!
+    )
+
     /// Setting this replays `currentState` immediately (see the
     /// `LocalTranscriber` doc comment for why).
     ///

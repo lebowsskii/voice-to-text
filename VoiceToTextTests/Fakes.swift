@@ -77,6 +77,13 @@ final class SuspendableFakeTranscriber: Transcriber {
 
 final class FakeLocalTranscriber: LocalTranscriber {
     let modelName: String
+    let metadata = ModelMetadata(
+        family: "Fake",
+        vendor: "Fake",
+        diskSize: "0 MB",
+        languages: "0 languages",
+        infoURL: URL(string: "https://example.com")!
+    )
     var onStateChange: ((ModelState) -> Void)?
     /// Settable so a test can put the fake in any lifecycle state. Defaults to
     /// `.ready` — the fake is usable straight away unless a test says otherwise.

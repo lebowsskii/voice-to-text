@@ -1,5 +1,20 @@
 import Foundation
 
+/// Static facts about a local model shown on its card in Settings — not
+/// download/load state, which lives in `ModelState` instead.
+struct ModelMetadata {
+    /// Model family, e.g. "Parakeet" or "WhisperKit" — used as the section
+    /// header together with `vendor`, e.g. "Parakeet by FluidAudio".
+    let family: String
+    let vendor: String
+    /// On-disk footprint of the downloaded model files. Deliberately not a
+    /// claim about RAM usage while loaded, which can differ — the card
+    /// labels this explicitly so the two aren't conflated.
+    let diskSize: String
+    let languages: String
+    let infoURL: URL
+}
+
 /// A `Transcriber` backed by a local model that must be downloaded and
 /// loaded before use — as opposed to a cloud engine like Gemini, which has
 /// no such lifecycle. `ParakeetTranscriber` and `WhisperTranscriber` both
@@ -8,6 +23,9 @@ import Foundation
 protocol LocalTranscriber: AnyObject, Transcriber {
     /// Display name for Settings, e.g. "Parakeet v3".
     var modelName: String { get }
+
+    /// Static description shown on the model's card in Settings.
+    var metadata: ModelMetadata { get }
 
     /// Called with the current state, on the main thread, whenever it
     /// changes. Settable so `ModelsSettingsView` can observe it; follows the

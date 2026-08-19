@@ -8,6 +8,14 @@ final class ParakeetTranscriber: LocalTranscriber {
 
     let modelName = "Parakeet v3"
 
+    let metadata = ModelMetadata(
+        family: "Parakeet",
+        vendor: "FluidAudio",
+        diskSize: "600 MB",
+        languages: "25 languages",
+        infoURL: URL(string: "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml")!
+    )
+
     /// Setting this replays `currentState` immediately (see the
     /// `LocalTranscriber` doc comment for why) — a view that starts
     /// observing after the model was already downloaded must not see a

@@ -25,7 +25,7 @@ struct SettingsWindow: View {
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
         .padding()
-        .frame(minWidth: 480, minHeight: 320)
+        .frame(minWidth: 380, minHeight: 560)
         // Settings is opened by temporarily flipping the app to a regular
         // activation policy (see `openSettingsWindow` in VoiceToTextApp) so
         // the window can be raised and shows up in Cmd+Tab. This view

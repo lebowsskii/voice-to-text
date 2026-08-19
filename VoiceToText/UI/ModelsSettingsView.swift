@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The "Models" section of Settings: pick the active engine, watch it
 /// download/load if it isn't ready yet.
@@ -23,11 +24,13 @@ struct ModelsSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            row(engine: .parakeet, transcriber: parakeet, state: parakeetState)
-            row(engine: .whisper, transcriber: whisper, state: whisperState)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                group(engine: .parakeet, transcriber: parakeet, state: parakeetState)
+                group(engine: .whisper, transcriber: whisper, state: whisperState)
+            }
+            .padding()
         }
-        .padding()
         .onAppear {
             parakeet.onStateChange = { parakeetState = $0 }
             whisper.onStateChange = { whisperState = $0 }
@@ -42,21 +45,84 @@ struct ModelsSettingsView: View {
     }
 
     @ViewBuilder
-    private func row(engine: Engine, transcriber: any LocalTranscriber, state: ModelState) -> some View {
-        HStack {
-            Button {
-                settings.selectedEngine = engine
-            } label: {
-                HStack {
-                    Image(systemName: settings.selectedEngine == engine ? "largecircle.fill.circle" : "circle")
-                    Text(transcriber.modelName)
-                    Spacer()
-                    stateView(state, transcriber: transcriber)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+    private func group(engine: Engine, transcriber: any LocalTranscriber, state: ModelState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(transcriber.metadata.family) by \(transcriber.metadata.vendor)")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            card(engine: engine, transcriber: transcriber, state: state)
         }
+    }
+
+    @ViewBuilder
+    private func card(engine: Engine, transcriber: any LocalTranscriber, state: ModelState) -> some View {
+        let isSelected = settings.selectedEngine == engine
+        let isReady = state == .ready
+
+        HStack(alignment: .top, spacing: 12) {
+            // Dimmed together, and the radio swapped for a lock, so a model
+            // that can't be selected yet reads as unavailable at a glance —
+            // only the state view (Download/progress/Retry) stays at full
+            // strength, since that's the one thing still actionable.
+            Group {
+                Image(systemName: isReady ? (isSelected ? "largecircle.fill.circle" : "circle") : "lock.fill")
+                    .foregroundStyle(isSelected && isReady ? Color.accentColor : .secondary)
+                    .imageScale(.large)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(transcriber.modelName)
+                        .font(.headline)
+
+                    HStack(spacing: 14) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "internaldrive")
+                            Text(transcriber.metadata.diskSize)
+                        }
+                        .help("Disk size — actual RAM usage while loaded may differ")
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "globe")
+                            Text(transcriber.metadata.languages)
+                        }
+
+                        Button {
+                            NSWorkspace.shared.open(transcriber.metadata.infoURL)
+                        } label: {
+                            Image(systemName: "info.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .help("View model page")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .opacity(isReady ? 1 : 0.55)
+
+            Spacer()
+
+            stateView(state, transcriber: transcriber)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.accentColor.opacity(0.1) : Color.gray.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // A model that isn't downloaded/loaded yet has nothing to switch
+            // to — selecting it would silently leave `selectedEngine` pointing
+            // at an engine that can't transcribe until it finishes preparing.
+            guard isReady else { return }
+            settings.selectedEngine = engine
+        }
+        .help(isReady ? "" : "Download this model to select it")
     }
 
     @ViewBuilder
@@ -66,7 +132,7 @@ struct ModelsSettingsView: View {
             Button("Download") {
                 Task { try? await transcriber.prepare() }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
         case .downloading(let progress):
             if let progress {
                 HStack(spacing: 6) {
@@ -101,7 +167,7 @@ struct ModelsSettingsView: View {
                 Button("Retry") {
                     Task { try? await transcriber.prepare() }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
             }
         }
     }
