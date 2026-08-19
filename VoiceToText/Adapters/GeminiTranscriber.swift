@@ -5,9 +5,12 @@ import os
 /// and `WhisperTranscriber`, this does not conform to `LocalTranscriber` —
 /// there is no model to download or load, only an API key and a network
 /// call. See `LocalTranscriber.swift` for why that distinction matters.
-final class GeminiTranscriber {
+final class GeminiTranscriber: Transcriber {
 
-    private static let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "gemini")
+    private let apiKeyStore: GeminiAPIKeyStore
+    private let settings: SettingsState
+    private let session: URLSession
+    private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "gemini")
 
     /// Models that reject `generationConfig.thinkingConfig` with a 400
     /// "Invalid argument" — checked before the field is ever sent.
@@ -17,6 +20,89 @@ final class GeminiTranscriber {
     /// unreliably otherwise.
     private static let minDurationSeconds: Double = 1.5
     private static let paddingDurationSeconds: Double = 1.0
+
+    init(apiKeyStore: GeminiAPIKeyStore, settings: SettingsState, session: URLSession = .shared) {
+        self.apiKeyStore = apiKeyStore
+        self.settings = settings
+        self.session = session
+    }
+
+    func transcribe(_ clip: AudioClip) async throws -> String {
+        guard !clip.isEmpty else { return "" }
+        guard let apiKey = apiKeyStore.get(), !apiKey.isEmpty else {
+            throw DictationError.transcriptionFailed("Gemini API key is not set. Add it in Settings → Models.")
+        }
+
+        let model = settings.geminiSelectedModel
+        var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")
+        components?.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        guard let url = components?.url else {
+            throw DictationError.transcriptionFailed("Gemini model name is invalid: \(model)")
+        }
+
+        let paddedSamples = Self.padded(clip.samples, sampleRate: clip.sampleRate)
+        let base64Audio = Self.wavData(from: paddedSamples, sampleRate: Int(clip.sampleRate)).base64EncodedString()
+
+        var requestBody: [String: Any] = [
+            "contents": [[
+                "parts": [
+                    ["text": "Transcribe the speech from this audio. Provide only the transcription text, without any additional commentary."],
+                    ["inline_data": ["mime_type": "audio/wav", "data": base64Audio]]
+                ]
+            ]]
+        ]
+        if settings.geminiDisableThinking, !Self.modelsWithoutThinkingConfig.contains(model) {
+            requestBody["generationConfig"] = ["thinkingConfig": ["thinkingBudget": 0]]
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        let (data, response) = try await Self.send(request, session: session)
+
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            log.error("Gemini request failed (status \(statusCode)): \(message)")
+            throw DictationError.transcriptionFailed("Gemini request failed (status \(statusCode)): \(message)")
+        }
+
+        let decoded: GenerateContentResponse
+        do {
+            decoded = try JSONDecoder().decode(GenerateContentResponse.self, from: data)
+        } catch {
+            throw DictationError.transcriptionFailed("Gemini response could not be parsed: \(error.localizedDescription)")
+        }
+
+        if let blockReason = decoded.promptFeedback?.blockReason {
+            throw DictationError.transcriptionFailed("Gemini blocked the request: \(blockReason)")
+        }
+        guard let text = decoded.candidates?.first?.content?.parts?.first?.text else {
+            throw DictationError.transcriptionFailed("Gemini returned no transcription text")
+        }
+        return text
+    }
+
+    /// Retries once or twice, 1s apart, on HTTP 503 ("high demand") — a
+    /// status the Gemini API returns regularly regardless of which model is
+    /// called. Every other status and every network error passes through
+    /// unchanged after the first try.
+    private static func send(
+        _ request: URLRequest,
+        session: URLSession,
+        retriesRemaining: Int = 2
+    ) async throws -> (Data, URLResponse) {
+        let (data, response) = try await session.data(for: request)
+        if retriesRemaining > 0,
+           let http = response as? HTTPURLResponse,
+           http.statusCode == 503 {
+            try await Task.sleep(for: .seconds(1))
+            return try await send(request, session: session, retriesRemaining: retriesRemaining - 1)
+        }
+        return (data, response)
+    }
 
     static func padded(_ samples: [Float], sampleRate: Double) -> [Float] {
         guard sampleRate > 0, Double(samples.count) / sampleRate < minDurationSeconds else { return samples }
@@ -58,6 +144,24 @@ final class GeminiTranscriber {
         }
 
         return data
+    }
+
+    private struct GenerateContentResponse: Decodable {
+        let candidates: [Candidate]?
+        let promptFeedback: PromptFeedback?
+
+        struct Candidate: Decodable {
+            let content: Content?
+        }
+        struct Content: Decodable {
+            let parts: [Part]?
+        }
+        struct Part: Decodable {
+            let text: String?
+        }
+        struct PromptFeedback: Decodable {
+            let blockReason: String?
+        }
     }
 }
 
