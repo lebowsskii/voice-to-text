@@ -69,8 +69,14 @@ struct ModelsSettingsView: View {
             .buttonStyle(.bordered)
         case .downloading(let progress):
             if let progress {
-                ProgressView(value: progress)
-                    .frame(width: 80)
+                HStack(spacing: 6) {
+                    ProgressView(value: progress)
+                        .frame(width: 80)
+                    Text(progress, format: .percent.precision(.fractionLength(0)))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(width: 36, alignment: .trailing)
+                }
             } else {
                 ProgressView()
                     .frame(width: 80)
@@ -79,7 +85,7 @@ struct ModelsSettingsView: View {
         case .loading:
             HStack(spacing: 4) {
                 ProgressView().controlSize(.small)
-                Text("Loading…").foregroundStyle(.secondary)
+                Text("Loading… this can take a minute").foregroundStyle(.secondary)
             }
         case .ready:
             Text("Downloaded").foregroundStyle(.secondary)

@@ -128,11 +128,16 @@ final class ParakeetTranscriber: LocalTranscriber {
     }
 
     private func reportDownloadProgress(_ progress: DownloadProgress) {
+        // FluidAudio's `fractionCompleted` already spans the whole
+        // download-then-compile pipeline as one continuous 0...1 value —
+        // downloading occupies [0, 0.5], compiling advances the rest of the
+        // way to 1.0 (see FluidAudio's `ProgressReporter`). Switching to a
+        // bare `.loading` spinner for `.compiling` discarded that second
+        // half entirely, which is why the bar looked stuck at 50%: that IS
+        // where the download genuinely finishes.
         switch progress.phase {
-        case .listing, .downloading:
+        case .listing, .downloading, .compiling:
             report(.downloading(progress: progress.fractionCompleted))
-        case .compiling:
-            report(.loading)
         }
     }
 

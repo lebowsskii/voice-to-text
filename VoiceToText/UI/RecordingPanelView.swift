@@ -13,8 +13,15 @@ struct RecordingPanelView: View {
     var body: some View {
         if let error = controller.lastError {
             errorPill(error)
-        } else {
+        } else if controller.state != .idle {
             recordingPill
+        } else {
+            // Idle with no error means the panel is about to be hidden by
+            // `RecordingPanelController`, but that hide() call lands one
+            // SwiftUI update after this view's own re-render — without this
+            // branch, a cancel landing on `.transcribing` would flash the
+            // waveform (which `centre` also renders while idle) for a frame.
+            EmptyView()
         }
     }
 
@@ -27,8 +34,13 @@ struct RecordingPanelView: View {
             Text(message)
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.9))
-                .lineLimit(2)
-                .frame(maxWidth: 320, alignment: .leading)
+                // The panel sizes itself from `NSView.fittingSize`
+                // (see `RecordingPanelController.position`), which — without
+                // this — measures Text at its natural single-line size and
+                // truncates instead of reporting the height a full wrap
+                // needs.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 420, alignment: .leading)
 
             Button {
                 controller.dismissError()

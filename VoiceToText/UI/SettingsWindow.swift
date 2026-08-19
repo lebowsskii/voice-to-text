@@ -1,37 +1,38 @@
+import AppKit
 import SwiftUI
 
-/// Sidebar shell for the whole Settings window. Only "Models" is
+/// Horizontal-tab shell for the whole Settings window. Only "Models" is
 /// implemented; "Recording" (mic + hotkey) and "About" (permissions) are
 /// later steps and get placeholders so this shell isn't rebuilt twice.
 struct SettingsWindow: View {
-    private enum Section: String, CaseIterable, Identifiable {
-        case models = "Models"
-        case recording = "Recording"
-        case about = "About"
-        var id: String { rawValue }
-    }
-
     let parakeet: any LocalTranscriber
     let whisper: any LocalTranscriber
     @Bindable var settings: SettingsState
 
-    @State private var selection: Section? = .models
-
     var body: some View {
-        NavigationSplitView {
-            List(Section.allCases, selection: $selection) { section in
-                Text(section.rawValue).tag(section)
-            }
-        } detail: {
-            switch selection ?? .models {
-            case .models:
-                ModelsSettingsView(parakeet: parakeet, whisper: whisper, settings: settings)
-            case .recording, .about:
-                Text("Coming soon")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+        TabView {
+            ModelsSettingsView(parakeet: parakeet, whisper: whisper, settings: settings)
+                .tabItem { Label("Models", systemImage: "gearshape") }
+
+            Text("Coming soon")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .tabItem { Label("Recording", systemImage: "mic") }
+
+            Text("Coming soon")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
+        .padding()
         .frame(minWidth: 480, minHeight: 320)
+        // Settings is opened by temporarily flipping the app to a regular
+        // activation policy (see `openSettingsWindow` in VoiceToTextApp) so
+        // the window can be raised and shows up in Cmd+Tab. This view
+        // disappearing means the window closed — flip back to accessory so
+        // the app returns to living only in the menu bar.
+        .onDisappear {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }

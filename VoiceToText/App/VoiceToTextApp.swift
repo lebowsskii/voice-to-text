@@ -1,8 +1,11 @@
+import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
 @main
 struct VoiceToTextApp: App {
+
+    @Environment(\.openSettings) private var openSettings
 
     @State private var controller: DictationController
     @State private var settings: SettingsState
@@ -51,8 +54,8 @@ struct VoiceToTextApp: App {
         MenuBarExtra {
             Text("Press ⌘⌥Z to dictate")
             Divider()
-            SettingsLink {
-                Text("Settings…")
+            Button("Settings…") {
+                openSettingsWindow()
             }
             Divider()
             Button("Quit VoiceToText") { NSApplication.shared.terminate(nil) }
@@ -120,6 +123,18 @@ struct VoiceToTextApp: App {
         Settings {
             SettingsWindow(parakeet: parakeet, whisper: whisper, settings: settings)
         }
+    }
+
+    /// `LSUIElement` makes this a menu-bar-only accessory app: no Dock icon,
+    /// no Cmd+Tab entry, and opening a window doesn't raise it above other
+    /// apps. Flip to a regular app for as long as Settings is open so the
+    /// window can actually come to the front and be found again later; the
+    /// window's `.onDisappear` (see `SettingsWindow`) flips it back.
+    @MainActor
+    private func openSettingsWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
     }
 
     /// The panel is visible whenever something is happening — a dictation in
