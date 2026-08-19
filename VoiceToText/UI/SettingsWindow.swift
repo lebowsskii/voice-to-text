@@ -7,11 +7,12 @@ import SwiftUI
 struct SettingsWindow: View {
     let parakeet: any LocalTranscriber
     let whisper: any LocalTranscriber
+    let geminiCatalog: GeminiModelCatalog
     @Bindable var settings: SettingsState
 
     var body: some View {
         TabView {
-            ModelsSettingsView(parakeet: parakeet, whisper: whisper, settings: settings)
+            ModelsSettingsView(parakeet: parakeet, whisper: whisper, geminiCatalog: geminiCatalog, settings: settings)
                 .tabItem { Label("Models", systemImage: "gearshape") }
 
             Text("Coming soon")

@@ -6,21 +6,25 @@ import AppKit
 struct ModelsSettingsView: View {
     let parakeet: any LocalTranscriber
     let whisper: any LocalTranscriber
+    let geminiCatalog: GeminiModelCatalog
     @Bindable var settings: SettingsState
 
     @State private var parakeetState: ModelState
     @State private var whisperState: ModelState
+    @State private var geminiKeyDraft: String
 
     /// Seeds the row states from the engines' synchronous `state` instead of a
     /// hardcoded `.notDownloaded`. The `onStateChange` replay set in
     /// `.onAppear` only arrives a frame later, which used to flash a "Download"
     /// button for an engine that is in fact already on disk.
-    init(parakeet: any LocalTranscriber, whisper: any LocalTranscriber, settings: SettingsState) {
+    init(parakeet: any LocalTranscriber, whisper: any LocalTranscriber, geminiCatalog: GeminiModelCatalog, settings: SettingsState) {
         self.parakeet = parakeet
         self.whisper = whisper
+        self.geminiCatalog = geminiCatalog
         _settings = Bindable(wrappedValue: settings)
         _parakeetState = State(initialValue: parakeet.state)
         _whisperState = State(initialValue: whisper.state)
+        _geminiKeyDraft = State(initialValue: settings.geminiAPIKey)
     }
 
     var body: some View {
@@ -28,6 +32,7 @@ struct ModelsSettingsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 group(engine: .parakeet, transcriber: parakeet, state: parakeetState)
                 group(engine: .whisper, transcriber: whisper, state: whisperState)
+                geminiGroup()
             }
             .padding()
         }
@@ -42,6 +47,104 @@ struct ModelsSettingsView: View {
             parakeet.onStateChange = nil
             whisper.onStateChange = nil
         }
+    }
+
+    @ViewBuilder
+    private func geminiGroup() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Gemini by Google")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            geminiCard()
+        }
+    }
+
+    @ViewBuilder
+    private func geminiCard() -> some View {
+        let hasKey = !settings.geminiAPIKey.isEmpty
+        let isSelected = settings.selectedEngine == .gemini
+        // Collapsed to just the summary row once a key exists and Gemini
+        // isn't the active engine — expanded whenever there's setup left to
+        // do (no key yet) or the user is looking at the engine they're using.
+        let expanded = isSelected || !hasKey
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: hasKey ? (isSelected ? "largecircle.fill.circle" : "circle") : "lock.fill")
+                    .foregroundStyle(isSelected && hasKey ? Color.accentColor : .secondary)
+                    .imageScale(.large)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Gemini")
+                        .font(.headline)
+                    Text("Audio is sent to Google's Gemini API for transcription.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard hasKey else { return }
+                settings.selectedEngine = .gemini
+            }
+            .help(hasKey ? "" : "Add an API key below to select Gemini")
+
+            if expanded {
+                geminiDetail()
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.accentColor.opacity(0.1) : Color.gray.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func geminiDetail() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SecureField("API key", text: $geminiKeyDraft)
+                .textFieldStyle(.roundedBorder)
+
+            HStack(spacing: 8) {
+                Button("Save") {
+                    settings.geminiAPIKey = geminiKeyDraft
+                    Task { await geminiCatalog.refresh(apiKey: geminiKeyDraft) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(geminiKeyDraft.isEmpty)
+
+                Button("Clear") {
+                    geminiKeyDraft = ""
+                    settings.geminiAPIKey = ""
+                }
+                .disabled(settings.geminiAPIKey.isEmpty)
+            }
+
+            if geminiCatalog.models.isEmpty {
+                TextField("Model name", text: $settings.geminiSelectedModel)
+                    .textFieldStyle(.roundedBorder)
+                    .help(geminiCatalog.lastFetchFailed ? "Couldn't fetch the model list — enter a model name manually" : "")
+            } else {
+                Picker("Model", selection: $settings.geminiSelectedModel) {
+                    ForEach(geminiCatalog.models, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            Toggle("Disable thinking", isOn: $settings.geminiDisableThinking)
+        }
+        .padding(.leading, 36) // aligns under the label, past the leading icon
     }
 
     @ViewBuilder

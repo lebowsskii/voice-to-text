@@ -16,6 +16,7 @@ struct VoiceToTextApp: App {
     @State private var errorDismissTask: Task<Void, Never>?
     private let parakeet: ParakeetTranscriber
     private let whisper: WhisperTranscriber
+    private let geminiCatalog: GeminiModelCatalog
 
     init() {
         // The composition root: the one place that picks concrete adapters.
@@ -26,9 +27,11 @@ struct VoiceToTextApp: App {
 
         let parakeet = ParakeetTranscriber()
         let whisper = WhisperTranscriber()
+        let geminiCatalog = GeminiModelCatalog()
         let gemini = GeminiTranscriber(apiKeyStore: apiKeyStore, settings: settings)
         self.parakeet = parakeet
         self.whisper = whisper
+        self.geminiCatalog = geminiCatalog
 
         let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
@@ -75,6 +78,15 @@ struct VoiceToTextApp: App {
                     case .parakeet: try? await parakeet.prepare()
                     case .whisper: try? await whisper.prepare()
                     case .gemini: break
+                    }
+                }
+                .task {
+                    // Refreshes the Gemini model list once at cold start — not
+                    // on every Settings window open, see
+                    // docs/superpowers/specs/2026-08-20-gemini-transcriber-design.md.
+                    let key = settings.geminiAPIKey
+                    if !key.isEmpty {
+                        await geminiCatalog.refresh(apiKey: key)
                     }
                 }
                 .task {
@@ -125,7 +137,7 @@ struct VoiceToTextApp: App {
         }
 
         Settings {
-            SettingsWindow(parakeet: parakeet, whisper: whisper, settings: settings)
+            SettingsWindow(parakeet: parakeet, whisper: whisper, geminiCatalog: geminiCatalog, settings: settings)
         }
     }
 
