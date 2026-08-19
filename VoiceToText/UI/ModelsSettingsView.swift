@@ -12,6 +12,7 @@ struct ModelsSettingsView: View {
     @State private var parakeetState: ModelState
     @State private var whisperState: ModelState
     @State private var geminiKeyDraft: String
+    @State private var isGeminiExpanded: Bool
 
     /// Seeds the row states from the engines' synchronous `state` instead of a
     /// hardcoded `.notDownloaded`. The `onStateChange` replay set in
@@ -25,6 +26,9 @@ struct ModelsSettingsView: View {
         _parakeetState = State(initialValue: parakeet.state)
         _whisperState = State(initialValue: whisper.state)
         _geminiKeyDraft = State(initialValue: settings.geminiAPIKey)
+        // Always starts collapsed — only the arrow opens it from here, so
+        // Settings doesn't open with the Gemini card sprawled out every time.
+        _isGeminiExpanded = State(initialValue: false)
     }
 
     var body: some View {
@@ -79,39 +83,54 @@ struct ModelsSettingsView: View {
         // reading it registers no dependency and never redraws on a save.
         let hasKey = settings.hasGeminiAPIKey
         let isSelected = settings.selectedEngine == .gemini
-        // Collapsed to just the summary row once a key exists and Gemini
-        // isn't the active engine — expanded whenever there's setup left to
-        // do (no key, or no model chosen yet) or the user is looking at the
-        // engine they're using. The no-model clause is what keeps the card
-        // open in the moment right after Save, when `hasKey` has flipped true
-        // but the user hasn't picked a model — or selected Gemini — yet.
-        let expanded = isSelected || !hasKey || settings.geminiSelectedModel.isEmpty
 
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: hasKey ? (isSelected ? "largecircle.fill.circle" : "circle") : "lock.fill")
-                    .foregroundStyle(isSelected && hasKey ? Color.accentColor : .secondary)
-                    .imageScale(.large)
+                HStack(alignment: .top, spacing: 12) {
+                    // The lock stands in for the radio whenever there's no
+                    // key — Gemini can't be selected yet, but the row (and
+                    // the arrow beside it) stays tappable so the user can
+                    // still get to the key field to fix that.
+                    Image(systemName: hasKey ? (isSelected ? "largecircle.fill.circle" : "circle") : "lock.fill")
+                        .foregroundStyle(isSelected && hasKey ? Color.accentColor : .secondary)
+                        .imageScale(.large)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Gemini")
-                        .font(.headline)
-                    Text("Audio is sent to Google's Gemini API for transcription.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Gemini")
+                            .font(.headline)
+                        Text("Audio is sent to Google's Gemini API for transcription.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    guard hasKey else { return }
+                    settings.selectedEngine = .gemini
+                }
+                .help(hasKey ? "" : "Add an API key below to select Gemini")
 
                 Spacer()
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard hasKey else { return }
-                settings.selectedEngine = .gemini
-            }
-            .help(hasKey ? "" : "Add an API key below to select Gemini")
 
-            if expanded {
-                geminiDetail()
+                // Separate from the row's own tap gesture above so it can
+                // open/close the detail regardless of whether a key is set —
+                // selecting the engine and expanding the card are two
+                // different actions.
+                Button {
+                    isGeminiExpanded.toggle()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isGeminiExpanded ? 90 : 0))
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .animation(.default, value: isGeminiExpanded)
+                .help(isGeminiExpanded ? "Collapse" : "Expand")
+            }
+
+            if isGeminiExpanded {
+                geminiDetail(hasKey: hasKey)
             }
         }
         .padding()
@@ -126,10 +145,13 @@ struct ModelsSettingsView: View {
     }
 
     @ViewBuilder
-    private func geminiDetail() -> some View {
+    private func geminiDetail(hasKey: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SecureField("API key", text: $geminiKeyDraft)
                 .textFieldStyle(.roundedBorder)
+
+            Link("Get an API key from Google AI Studio", destination: URL(string: "https://aistudio.google.com/api-keys")!)
+                .font(.caption)
 
             HStack(spacing: 8) {
                 Button("Save") {
@@ -153,20 +175,26 @@ struct ModelsSettingsView: View {
                 .disabled(!settings.hasGeminiAPIKey)
             }
 
-            if geminiCatalog.models.isEmpty {
-                TextField("Model name", text: $settings.geminiSelectedModel)
-                    .textFieldStyle(.roundedBorder)
-                    .help(geminiCatalog.lastFetchFailed ? "Couldn't fetch the model list — enter a model name manually" : "")
-            } else {
+            // Without a key there's nothing to fetch a model list with, and a
+            // stale cached list from a previously-saved key would offer
+            // models the user can no longer actually call — so the field
+            // drops to manual entry, disabled, until a key is saved.
+            if hasKey && !geminiCatalog.models.isEmpty {
                 Picker("Model", selection: $settings.geminiSelectedModel) {
                     ForEach(geminiCatalog.models, id: \.self) { name in
                         Text(name).tag(name)
                     }
                 }
                 .labelsHidden()
+            } else {
+                TextField("Model name", text: $settings.geminiSelectedModel)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(!hasKey)
+                    .help(!hasKey ? "Add an API key to pick a model" : (geminiCatalog.lastFetchFailed ? "Couldn't fetch the model list — enter a model name manually" : ""))
             }
 
             Toggle("Disable thinking", isOn: $settings.geminiDisableThinking)
+                .disabled(!hasKey || GeminiTranscriber.modelsWithoutThinkingConfig.contains(settings.geminiSelectedModel))
         }
         .padding(.leading, 36) // aligns under the label, past the leading icon
     }
@@ -189,44 +217,39 @@ struct ModelsSettingsView: View {
         let isReady = state == .ready
 
         HStack(alignment: .top, spacing: 12) {
-            // Dimmed together, and the radio swapped for a lock, so a model
-            // that can't be selected yet reads as unavailable at a glance —
-            // only the state view (Download/progress/Retry) stays at full
-            // strength, since that's the one thing still actionable.
-            Group {
-                Image(systemName: isReady ? (isSelected ? "largecircle.fill.circle" : "circle") : "lock.fill")
-                    .foregroundStyle(isSelected && isReady ? Color.accentColor : .secondary)
-                    .imageScale(.large)
+            // The radio swaps for a lock so a model that can't be selected
+            // yet reads as unavailable at a glance.
+            Image(systemName: isReady ? (isSelected ? "largecircle.fill.circle" : "circle") : "lock.fill")
+                .foregroundStyle(isSelected && isReady ? Color.accentColor : .secondary)
+                .imageScale(.large)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(transcriber.modelName)
-                        .font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(transcriber.modelName)
+                    .font(.headline)
 
-                    HStack(spacing: 14) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "internaldrive")
-                            Text(transcriber.metadata.diskSize)
-                        }
-                        .help("Disk size — actual RAM usage while loaded may differ")
-
-                        HStack(spacing: 4) {
-                            Image(systemName: "globe")
-                            Text(transcriber.metadata.languages)
-                        }
-
-                        Button {
-                            NSWorkspace.shared.open(transcriber.metadata.infoURL)
-                        } label: {
-                            Image(systemName: "info.circle")
-                        }
-                        .buttonStyle(.plain)
-                        .help("View model page")
+                HStack(spacing: 14) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "internaldrive")
+                        Text(transcriber.metadata.diskSize)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .help("Disk size — actual RAM usage while loaded may differ")
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                        Text(transcriber.metadata.languages)
+                    }
+
+                    Button {
+                        NSWorkspace.shared.open(transcriber.metadata.infoURL)
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .buttonStyle(.plain)
+                    .help("View model page")
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .opacity(isReady ? 1 : 0.55)
 
             Spacer()
 

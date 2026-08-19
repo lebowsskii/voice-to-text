@@ -13,6 +13,13 @@ final class GeminiModelCatalog {
     private(set) var models: [String]
     private(set) var lastFetchFailed = false
 
+    /// Preferred fallback whenever the current selection isn't on offer —
+    /// fastest and most consistent of the models benchmarked (see
+    /// `super-voice-assistant/SharedSources/GeminiModels.swift`). Only used
+    /// when it's actually in the list; otherwise falls back to the first
+    /// model, same as before.
+    static let defaultModelName = "gemini-3.1-flash-lite"
+
     private let cacheURL: URL
     private let session: URLSession
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "gemini-catalog")
@@ -92,6 +99,7 @@ final class GeminiModelCatalog {
     /// by hand would be worse than leaving it.
     static func defaultedSelection(current: String, from models: [String]) -> String {
         guard !models.contains(current) else { return current }
+        if models.contains(defaultModelName) { return defaultModelName }
         return models.first ?? current
     }
 

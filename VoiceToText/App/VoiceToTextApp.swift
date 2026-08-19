@@ -5,11 +5,10 @@ import SwiftUI
 @main
 struct VoiceToTextApp: App {
 
-    @Environment(\.openSettings) private var openSettings
-
     @State private var controller: DictationController
     @State private var settings: SettingsState
     @State private var panel: RecordingPanelController?
+    @State private var settingsWindow: SettingsWindowController?
     /// Auto-dismiss timer for the currently shown error. Re-created (and the
     /// old one cancelled) every time `lastError` changes, so a stale timer
     /// from a previous error can never dismiss the one currently on screen.
@@ -135,22 +134,27 @@ struct VoiceToTextApp: App {
                     }
                 }
         }
-
-        Settings {
-            SettingsWindow(parakeet: parakeet, whisper: whisper, geminiCatalog: geminiCatalog, settings: settings)
-        }
     }
 
     /// `LSUIElement` makes this a menu-bar-only accessory app: no Dock icon,
     /// no Cmd+Tab entry, and opening a window doesn't raise it above other
     /// apps. Flip to a regular app for as long as Settings is open so the
     /// window can actually come to the front and be found again later; the
-    /// window's `.onDisappear` (see `SettingsWindow`) flips it back.
+    /// controller's `NSWindowDelegate` (see `SettingsWindowController`) flips
+    /// it back once the window closes.
     @MainActor
     private func openSettingsWindow() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        openSettings()
+
+        let resolvedWindow: SettingsWindowController
+        if let settingsWindow {
+            resolvedWindow = settingsWindow
+        } else {
+            resolvedWindow = SettingsWindowController(parakeet: parakeet, whisper: whisper, geminiCatalog: geminiCatalog, settings: settings)
+            settingsWindow = resolvedWindow
+        }
+        resolvedWindow.show()
     }
 
     /// The panel is visible whenever something is happening — a dictation in
