@@ -27,6 +27,15 @@ final class SettingsState {
         }
     }
 
+    /// Whether a key is stored, as a *stored* property so `@Observable` can
+    /// actually instrument it. `geminiAPIKey` below is computed, and
+    /// `@Observable` only tracks stored properties — a view reading it
+    /// registers no dependency and a write emits no change notification, so
+    /// the Settings UI would never redraw on its own after a save. Views that
+    /// only need to know whether a key exists read this instead; the secret
+    /// itself still lives nowhere but the Keychain.
+    private(set) var hasGeminiAPIKey: Bool
+
     /// Not cached in memory — read and written straight through to the
     /// Keychain on every access. Settings opens rarely, and a secret has no
     /// business lingering in a property longer than it has to.
@@ -38,6 +47,7 @@ final class SettingsState {
             } else {
                 apiKeyStore.set(newValue)
             }
+            hasGeminiAPIKey = !newValue.isEmpty
         }
     }
 
@@ -50,5 +60,6 @@ final class SettingsState {
         self.selectedEngine = store.selectedEngine
         self.geminiSelectedModel = store.geminiSelectedModel
         self.geminiDisableThinking = store.geminiDisableThinking
+        self.hasGeminiAPIKey = !(apiKeyStore.get() ?? "").isEmpty
     }
 }

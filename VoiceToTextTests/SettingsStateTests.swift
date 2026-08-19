@@ -66,4 +66,23 @@ struct SettingsStateTests {
         state.geminiAPIKey = ""
         #expect(state.geminiAPIKey == "")
     }
+
+    /// `hasGeminiAPIKey` is the observable stand-in the Settings UI watches —
+    /// it has to track every write to the computed, unobservable key.
+    @Test("hasGeminiAPIKey tracks the stored key through set, clear, and a fresh instance")
+    func hasGeminiAPIKeyTracksTheKey() {
+        let suiteName = "SettingsStateTests.\(UUID().uuidString)"
+        let store = SettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
+
+        let state = freshState(sharing: store, service: suiteName)
+        #expect(state.hasGeminiAPIKey == false)
+
+        state.geminiAPIKey = "test-key-123"
+        #expect(state.hasGeminiAPIKey == true)
+        #expect(freshState(sharing: store, service: suiteName).hasGeminiAPIKey == true)
+
+        state.geminiAPIKey = ""
+        #expect(state.hasGeminiAPIKey == false)
+        #expect(freshState(sharing: store, service: suiteName).hasGeminiAPIKey == false)
+    }
 }

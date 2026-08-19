@@ -34,8 +34,13 @@ final class GeminiTranscriber: Transcriber {
         }
 
         let model = settings.geminiSelectedModel
-        var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")
-        components?.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        // An empty name still forms a valid URL (`models/:generateContent`),
+        // so the `guard let url` below would wave it through and the user
+        // would see a raw Google 404 body instead of something actionable.
+        guard !model.isEmpty else {
+            throw DictationError.transcriptionFailed("No Gemini model selected. Pick one in Settings → Models.")
+        }
+        let components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")
         guard let url = components?.url else {
             throw DictationError.transcriptionFailed("Gemini model name is invalid: \(model)")
         }
@@ -58,6 +63,9 @@ final class GeminiTranscriber: Transcriber {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Header, not a `?key=` query item: request URLs end up in caches and
+        // logs, and this one carries a secret. See `GeminiModelCatalog`.
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
         let (data, response) = try await Self.send(request, session: session)

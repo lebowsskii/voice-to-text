@@ -40,6 +40,17 @@ struct ModelsSettingsView: View {
             parakeet.onStateChange = { parakeetState = $0 }
             whisper.onStateChange = { whisperState = $0 }
         }
+        // Nothing else ever picks a Gemini model: the stored selection starts
+        // empty, so without this the picker renders blank (SwiftUI logs an
+        // "invalid selection" and does *not* auto-select) and dictation goes
+        // out with no model name. Fires on appear as well as on every refresh,
+        // so the disk-cached list seeds a selection too — not just a fetch.
+        .onChange(of: geminiCatalog.models, initial: true) { _, models in
+            settings.geminiSelectedModel = GeminiModelCatalog.defaultedSelection(
+                current: settings.geminiSelectedModel,
+                from: models
+            )
+        }
         // Each `.onAppear` resets these, so this only matters while the window
         // is closed — but leaving a closure pointing at a dead view's state
         // hanging off a process-lifetime object is worth a line to avoid.
@@ -63,12 +74,18 @@ struct ModelsSettingsView: View {
 
     @ViewBuilder
     private func geminiCard() -> some View {
-        let hasKey = !settings.geminiAPIKey.isEmpty
+        // The observable flag, not `geminiAPIKey` — that one is a computed
+        // Keychain passthrough, which `@Observable` cannot track, so a view
+        // reading it registers no dependency and never redraws on a save.
+        let hasKey = settings.hasGeminiAPIKey
         let isSelected = settings.selectedEngine == .gemini
         // Collapsed to just the summary row once a key exists and Gemini
         // isn't the active engine — expanded whenever there's setup left to
-        // do (no key yet) or the user is looking at the engine they're using.
-        let expanded = isSelected || !hasKey
+        // do (no key, or no model chosen yet) or the user is looking at the
+        // engine they're using. The no-model clause is what keeps the card
+        // open in the moment right after Save, when `hasKey` has flipped true
+        // but the user hasn't picked a model — or selected Gemini — yet.
+        let expanded = isSelected || !hasKey || settings.geminiSelectedModel.isEmpty
 
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
@@ -125,8 +142,15 @@ struct ModelsSettingsView: View {
                 Button("Clear") {
                     geminiKeyDraft = ""
                     settings.geminiAPIKey = ""
+                    // Gemini can't transcribe without a key, and its card now
+                    // renders as locked — leaving it selected would show a
+                    // greyed-out card as the active engine and fail every
+                    // dictation from here on.
+                    if settings.selectedEngine == .gemini {
+                        settings.selectedEngine = .parakeet
+                    }
                 }
-                .disabled(settings.geminiAPIKey.isEmpty)
+                .disabled(!settings.hasGeminiAPIKey)
             }
 
             if geminiCatalog.models.isEmpty {

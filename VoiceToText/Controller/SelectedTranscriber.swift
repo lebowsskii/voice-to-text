@@ -22,11 +22,16 @@ final class SelectedTranscriber: Transcriber {
     }
 
     func transcribe(_ clip: AudioClip) async throws -> String {
-        guard settings.selectedEngine != .gemini else {
-            return try await gemini.transcribe(clip)
+        // Exhaustive on purpose: a future fourth engine must fail to compile
+        // here rather than silently fall through to whichever engine a
+        // default branch happened to name.
+        let transcriber: any LocalTranscriber
+        switch settings.selectedEngine {
+        case .gemini: return try await gemini.transcribe(clip)
+        case .parakeet: transcriber = parakeet
+        case .whisper: transcriber = whisper
         }
 
-        let transcriber: any LocalTranscriber = settings.selectedEngine == .parakeet ? parakeet : whisper
         // Only the engine picked at launch got a `prepare()` call, so the other
         // one has files on disk but nothing loaded into memory. Preparing here
         // fixes that — and is idempotent, so a load already in flight is simply

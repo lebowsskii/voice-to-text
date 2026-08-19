@@ -35,12 +35,19 @@ final class GeminiModelCatalog {
     func refresh(apiKey: String) async {
         guard !apiKey.isEmpty else { return }
 
-        var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models")!
-        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
-        guard let url = components.url else { return }
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
+
+        // The key goes in a header, never the query string: `URLCache` keys on
+        // the request URL and persists it to `~/Library/Caches`, which would
+        // write the key to disk in plaintext and undo the whole point of
+        // keeping it in the Keychain. `.reloadIgnoringLocalCacheData` is belt
+        // and braces on top of that.
+        var request = URLRequest(url: url)
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
 
         do {
-            let (data, response) = try await session.data(from: url)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 log.error("Gemini model list request failed with status \((response as? HTTPURLResponse)?.statusCode ?? 0)")
                 lastFetchFailed = true
@@ -71,6 +78,21 @@ final class GeminiModelCatalog {
             let name: String
             let supportedGenerationMethods: [String]?
         }
+    }
+
+    /// Which model should be selected, given the list currently on offer and
+    /// whatever is selected now. Nothing ever picks a first model otherwise:
+    /// the stored selection starts empty, so a fresh install would render a
+    /// blank picker and send `models/:generateContent` at the API.
+    ///
+    /// Pure and static so the catalog stays free of any `SettingsState`
+    /// dependency — the caller owns the selection, this only answers what it
+    /// should be. An empty list leaves the selection alone: that's the
+    /// manual-entry path (fetch failed), and clobbering a name the user typed
+    /// by hand would be worse than leaving it.
+    static func defaultedSelection(current: String, from models: [String]) -> String {
+        guard !models.contains(current) else { return current }
+        return models.first ?? current
     }
 
     static func modelNames(from models: [ListModelsResponse.Model]) -> [String] {
