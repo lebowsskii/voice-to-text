@@ -27,6 +27,25 @@ final class SettingsState {
         }
     }
 
+    /// `nil` means "use the system default input device".
+    var selectedMicDeviceUID: String? {
+        didSet {
+            guard selectedMicDeviceUID != oldValue else { return }
+            store.selectedMicDeviceUID = selectedMicDeviceUID
+        }
+    }
+
+    /// A display string for the current toggle-dictation hotkey, e.g. "⌥⌘Z".
+    /// `KeyboardShortcuts` owns the actual binding and its own storage — this
+    /// is only a mirror the UI can observe. `@Observable` can't see straight
+    /// through to `KeyboardShortcuts.getShortcut(for:)`, since nothing about
+    /// that call is tracked, so without a stored property like this one the
+    /// menu bar label would keep showing whatever combo was current the last
+    /// time its view happened to re-render for an unrelated reason — not
+    /// necessarily the one actually bound right now. Not persisted through
+    /// `store`: `KeyboardShortcuts` already persists the real binding.
+    var toggleDictationShortcutDescription = "Not set"
+
     /// Whether a key is stored, as a *stored* property so `@Observable` can
     /// actually instrument it. `geminiAPIKey` below is computed, and
     /// `@Observable` only tracks stored properties — a view reading it
@@ -60,6 +79,7 @@ final class SettingsState {
         self.selectedEngine = store.selectedEngine
         self.geminiSelectedModel = store.geminiSelectedModel
         self.geminiDisableThinking = store.geminiDisableThinking
+        self.selectedMicDeviceUID = store.selectedMicDeviceUID
         self.hasGeminiAPIKey = !(apiKeyStore.get() ?? "").isEmpty
     }
 }

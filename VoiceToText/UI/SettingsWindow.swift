@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Horizontal-tab shell for the whole Settings window. Only "Models" is
-/// implemented; "Recording" (mic + hotkey) and "About" (permissions) are
-/// later steps and get placeholders so this shell isn't rebuilt twice.
+/// Horizontal-tab shell for the whole Settings window. "About" (permissions)
+/// is a later step and gets a placeholder so this shell isn't rebuilt twice.
 struct SettingsWindow: View {
     let parakeet: any LocalTranscriber
     let whisper: any LocalTranscriber
@@ -14,9 +13,7 @@ struct SettingsWindow: View {
             ModelsSettingsView(parakeet: parakeet, whisper: whisper, geminiCatalog: geminiCatalog, settings: settings)
                 .tabItem { Label("Models", systemImage: "gearshape") }
 
-            Text("Coming soon")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            RecordingSettingsView(settings: settings)
                 .tabItem { Label("Recording", systemImage: "mic") }
 
             Text("Coming soon")

@@ -1,8 +1,10 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 import os
 
-/// Records the default input device and hands back 16 kHz mono samples.
+/// Records the input device selected in Settings (or the system default) and
+/// hands back 16 kHz mono samples.
 final class MicRecorder: AudioSource {
 
     /// The sample rate every engine in this app expects.
@@ -10,11 +12,16 @@ final class MicRecorder: AudioSource {
 
     var onLevel: ((Float) -> Void)?
 
+    private let settings: SettingsState
     private let engine = AVAudioEngine()
     private var samples: [Float] = []
     private let samplesLock = NSLock()
     private var tapInstalled = false
     private let log = Logger(subsystem: "com.lebowsskii.voicetotext", category: "recorder")
+
+    init(settings: SettingsState) {
+        self.settings = settings
+    }
 
     func start() throws {
         guard !engine.isRunning else {
@@ -34,6 +41,7 @@ final class MicRecorder: AudioSource {
         }
 
         let input = engine.inputNode
+        applySelectedDevice(to: input)
         let inputFormat = input.outputFormat(forBus: 0)
 
         // With no usable input device the node reports a degenerate 0 Hz format.
@@ -93,6 +101,59 @@ final class MicRecorder: AudioSource {
         if engine.isRunning {
             engine.stop()
         }
+    }
+
+    /// Points this recorder's own `AVAudioEngine` at the device chosen in
+    /// Settings, scoped to this app — unlike changing the system-wide default
+    /// input device, it leaves every other app's input alone. A `nil`
+    /// selection, or a device that has since been unplugged, is left as the
+    /// engine's own default rather than surfaced as an error: falling back
+    /// silently beats failing a dictation over a stale device choice.
+    private func applySelectedDevice(to input: AVAudioInputNode) {
+        guard let uid = settings.selectedMicDeviceUID else { return }
+        guard let deviceID = Self.deviceID(forUID: uid) else {
+            log.info("Selected mic device is no longer available, using system default")
+            return
+        }
+        guard let audioUnit = input.audioUnit else { return }
+
+        var mutableID = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &mutableID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status != noErr {
+            log.error("Failed to select mic device \(uid): OSStatus \(status)")
+        }
+    }
+
+    private static func deviceID(forUID uid: String) -> AudioDeviceID? {
+        var deviceID = AudioDeviceID(0)
+        var propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var cfUID = uid as CFString
+
+        let status = withUnsafeMutablePointer(to: &cfUID) { uidPtr in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size),
+                uidPtr,
+                &propertySize,
+                &deviceID
+            )
+        }
+
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
     }
 
     /// Throws unless the microphone is ours to use. On a first run this also

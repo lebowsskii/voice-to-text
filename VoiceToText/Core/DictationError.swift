@@ -14,7 +14,7 @@ enum DictationError: Error, Equatable {
         case .microphoneUnavailable:
             "Microphone is unavailable. Check Privacy & Security settings."
         case .microphonePermissionNeeded:
-            "Allow microphone access in the dialog, then press ⌘⌥Z again."
+            "Allow microphone access in the dialog, then try dictating again."
         case .accessibilityDenied:
             "Text is on the clipboard — paste it with ⌘V. Grant Accessibility access to paste automatically."
         case .transcriptionFailed(let detail):

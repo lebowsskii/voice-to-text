@@ -8,6 +8,7 @@ final class SettingsStore {
     private let selectedEngineKey = "selectedEngine"
     private let geminiSelectedModelKey = "geminiSelectedModel"
     private let geminiDisableThinkingKey = "geminiDisableThinking"
+    private let selectedMicDeviceUIDKey = "selectedMicDeviceUID"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -32,5 +33,11 @@ final class SettingsStore {
     var geminiDisableThinking: Bool {
         get { defaults.object(forKey: geminiDisableThinkingKey) as? Bool ?? true }
         set { defaults.set(newValue, forKey: geminiDisableThinkingKey) }
+    }
+
+    /// `nil` means "use the system default input device".
+    var selectedMicDeviceUID: String? {
+        get { defaults.string(forKey: selectedMicDeviceUIDKey) }
+        set { defaults.set(newValue, forKey: selectedMicDeviceUIDKey) }
     }
 }

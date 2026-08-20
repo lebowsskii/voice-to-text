@@ -22,6 +22,7 @@ struct VoiceToTextApp: App {
         // Everything below this line only ever sees the Core protocols.
         let apiKeyStore = GeminiAPIKeyStore()
         let settings = SettingsState(store: SettingsStore(), apiKeyStore: apiKeyStore)
+        settings.toggleDictationShortcutDescription = KeyboardShortcuts.getShortcut(for: .toggleDictation)?.description ?? "Not set"
         self._settings = State(initialValue: settings)
 
         let parakeet = ParakeetTranscriber()
@@ -35,7 +36,7 @@ struct VoiceToTextApp: App {
         let selected = SelectedTranscriber(parakeet: parakeet, whisper: whisper, gemini: gemini, settings: settings)
 
         _controller = State(initialValue: DictationController(
-            audio: MicRecorder(),
+            audio: MicRecorder(settings: settings),
             transcriber: selected,
             inserter: PasteInserter(
                 pasteboard: SystemPasteboard(),
@@ -56,7 +57,14 @@ struct VoiceToTextApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            Text("Press ⌘⌥Z to dictate")
+            // `settings.toggleDictationShortcutDescription`, not a direct
+            // `KeyboardShortcuts.getShortcut` call — the latter isn't
+            // `@Observable`-tracked, so SwiftUI would have no reason to
+            // redraw this label when `RecordingSettingsView` rebinds the
+            // hotkey elsewhere, and it would keep showing whatever combo was
+            // current the last time this view happened to redraw for some
+            // unrelated reason.
+            Text("Press \(settings.toggleDictationShortcutDescription) to dictate")
             Divider()
             Button("Settings…") {
                 openSettingsWindow()

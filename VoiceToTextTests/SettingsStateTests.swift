@@ -67,6 +67,27 @@ struct SettingsStateTests {
         #expect(state.geminiAPIKey == "")
     }
 
+    @Test("selectedMicDeviceUID defaults to nil (system default) when nothing was ever saved")
+    func selectedMicDeviceUIDDefaultsToNil() {
+        #expect(freshState().selectedMicDeviceUID == nil)
+    }
+
+    @Test("changing selectedMicDeviceUID persists through a new SettingsState reading the same store, including back to nil")
+    func selectedMicDeviceUIDPersistsAcrossInstances() {
+        let suiteName = "SettingsStateTests.\(UUID().uuidString)"
+        let store = SettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
+
+        let first = freshState(sharing: store, service: suiteName)
+        first.selectedMicDeviceUID = "AppleUSBAudioEngine:Some Vendor:USB Mic:12345"
+
+        let second = freshState(sharing: store, service: suiteName)
+        #expect(second.selectedMicDeviceUID == "AppleUSBAudioEngine:Some Vendor:USB Mic:12345")
+
+        second.selectedMicDeviceUID = nil
+        let third = freshState(sharing: store, service: suiteName)
+        #expect(third.selectedMicDeviceUID == nil)
+    }
+
     /// `hasGeminiAPIKey` is the observable stand-in the Settings UI watches —
     /// it has to track every write to the computed, unobservable key.
     @Test("hasGeminiAPIKey tracks the stored key through set, clear, and a fresh instance")
