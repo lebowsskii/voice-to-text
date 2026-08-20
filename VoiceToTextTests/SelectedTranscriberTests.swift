@@ -9,7 +9,7 @@ struct SelectedTranscriberTests {
         let suiteName = "SelectedTranscriberTests.\(UUID().uuidString)"
         let store = SettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
         let apiKeyStore = GeminiAPIKeyStore(service: suiteName)
-        let settings = SettingsState(store: store, apiKeyStore: apiKeyStore)
+        let settings = SettingsState(store: store, apiKeyStore: apiKeyStore, loginItemStore: LoginItemStore())
         settings.selectedEngine = engine
         return settings
     }

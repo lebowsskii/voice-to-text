@@ -16,6 +16,10 @@ struct RecordingSettingsView: View {
 
     var body: some View {
         Form {
+            Section("General") {
+                Toggle("Launch at Login", isOn: $settings.launchAtLogin)
+            }
+
             Section("Microphone") {
                 Picker("Input device", selection: deviceSelection) {
                     Text("System Default").tag(Self.systemDefaultTag)

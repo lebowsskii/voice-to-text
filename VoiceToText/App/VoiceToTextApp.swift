@@ -21,7 +21,7 @@ struct VoiceToTextApp: App {
         // The composition root: the one place that picks concrete adapters.
         // Everything below this line only ever sees the Core protocols.
         let apiKeyStore = GeminiAPIKeyStore()
-        let settings = SettingsState(store: SettingsStore(), apiKeyStore: apiKeyStore)
+        let settings = SettingsState(store: SettingsStore(), apiKeyStore: apiKeyStore, loginItemStore: LoginItemStore())
         settings.toggleDictationShortcutDescription = KeyboardShortcuts.getShortcut(for: .toggleDictation)?.description ?? "Not set"
         self._settings = State(initialValue: settings)
 

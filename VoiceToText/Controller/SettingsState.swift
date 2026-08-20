@@ -70,16 +70,47 @@ final class SettingsState {
         }
     }
 
+    /// A *stored* property, read once from `SMAppService` at launch and
+    /// updated optimistically on toggle — not recomputed from
+    /// `loginItemStore.isEnabled` on every read. `SMAppService.mainApp.status`
+    /// is known to intermittently misreport `.notFound` for an already-registered
+    /// app (observed on ad-hoc-signed debug builds run from DerivedData rather
+    /// than a stable `/Applications` install); re-deriving this property from a
+    /// live query on every view redraw let that transient misreport snap the
+    /// toggle back off seconds after the user turned it on, even though the
+    /// login item was never actually removed.
+    var launchAtLogin: Bool {
+        didSet {
+            // `isRevertingLaunchAtLogin` guards against re-entering this
+            // `didSet` when the catch block below reassigns `launchAtLogin`
+            // back to `oldValue` — without it, that reassignment would
+            // trigger `didSet` again and fire a second, unwanted
+            // `setEnabled` call.
+            guard !isRevertingLaunchAtLogin, launchAtLogin != oldValue else { return }
+            do {
+                try loginItemStore.setEnabled(launchAtLogin)
+            } catch {
+                isRevertingLaunchAtLogin = true
+                launchAtLogin = oldValue
+                isRevertingLaunchAtLogin = false
+            }
+        }
+    }
+    private var isRevertingLaunchAtLogin = false
+
     private let store: SettingsStore
     private let apiKeyStore: GeminiAPIKeyStore
+    private let loginItemStore: LoginItemStore
 
-    init(store: SettingsStore, apiKeyStore: GeminiAPIKeyStore) {
+    init(store: SettingsStore, apiKeyStore: GeminiAPIKeyStore, loginItemStore: LoginItemStore) {
         self.store = store
         self.apiKeyStore = apiKeyStore
+        self.loginItemStore = loginItemStore
         self.selectedEngine = store.selectedEngine
         self.geminiSelectedModel = store.geminiSelectedModel
         self.geminiDisableThinking = store.geminiDisableThinking
         self.selectedMicDeviceUID = store.selectedMicDeviceUID
         self.hasGeminiAPIKey = !(apiKeyStore.get() ?? "").isEmpty
+        self.launchAtLogin = loginItemStore.isEnabled
     }
 }

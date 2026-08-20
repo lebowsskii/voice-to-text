@@ -12,11 +12,11 @@ struct SettingsStateTests {
         let suiteName = "SettingsStateTests.\(UUID().uuidString)"
         let store = SettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
         let apiKeyStore = GeminiAPIKeyStore(service: suiteName)
-        return SettingsState(store: store, apiKeyStore: apiKeyStore)
+        return SettingsState(store: store, apiKeyStore: apiKeyStore, loginItemStore: LoginItemStore())
     }
 
     private func freshState(sharing store: SettingsStore, service: String) -> SettingsState {
-        SettingsState(store: store, apiKeyStore: GeminiAPIKeyStore(service: service))
+        SettingsState(store: store, apiKeyStore: GeminiAPIKeyStore(service: service), loginItemStore: LoginItemStore())
     }
 
     @Test("defaults to Parakeet when nothing was ever saved")
