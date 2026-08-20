@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Horizontal-tab shell for the whole Settings window. "About" (permissions)
-/// is a later step and gets a placeholder so this shell isn't rebuilt twice.
+/// Horizontal-tab shell for the whole Settings window.
 struct SettingsWindow: View {
     let parakeet: any LocalTranscriber
     let whisper: any LocalTranscriber
@@ -16,9 +15,7 @@ struct SettingsWindow: View {
             RecordingSettingsView(settings: settings)
                 .tabItem { Label("Recording", systemImage: "mic") }
 
-            Text("Coming soon")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            AboutSettingsView()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
         .padding()
