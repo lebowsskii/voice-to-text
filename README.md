@@ -12,6 +12,16 @@
 - Clipboard is restored after pasting
 - Switch engines anytime in Settings → Models, takes effect immediately
 
+## Install
+
+Download the latest `.dmg` from [Releases](../../releases), drag `VoiceToText.app` to `/Applications`.
+
+The app isn't notarized, so Gatekeeper will block it on first launch. Clear the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/VoiceToText.app
+```
+
 ## Demo
 
 **Parakeet transcription (russian):**
@@ -30,21 +40,6 @@ https://github.com/user-attachments/assets/032bcbc4-a515-4352-ae47-cfe5a8abc982
 
 - macOS 15.0+
 - Local engines download their models on first use (a few hundred MB each)
-
-## Download & run
-
-Grab the latest `.dmg` from [Releases](../../releases), drag `VoiceToText.app` to `/Applications`.
-
-The app isn't notarized, so Gatekeeper will block it on first launch. Clear the quarantine flag once:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/VoiceToText.app
-```
-
-On first launch, grant two permissions:
-
-1. **Microphone** — the system prompt appears automatically.
-2. **Accessibility** — `System Settings → Privacy & Security → Accessibility`, add `VoiceToText`. Without it, transcribed text lands on the clipboard but isn't pasted automatically.
 
 ## Build from source
 
