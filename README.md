@@ -12,6 +12,12 @@
 - Clipboard is restored after pasting
 - Switch engines anytime in Settings → Models, takes effect immediately
 
+## Demo
+
+**Parakeet transcription (russian):**
+
+https://github.com/user-attachments/assets/d8ba53bc-b939-45ae-891c-7a9283cd8aeb
+
 ## Engines
 
 | Engine | Where it runs | Notes |
