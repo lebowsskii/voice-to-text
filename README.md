@@ -16,7 +16,7 @@
 
 **Parakeet transcription (russian):**
 
-https://github.com/user-attachments/assets/d8ba53bc-b939-45ae-891c-7a9283cd8aeb
+https://github.com/user-attachments/assets/032bcbc4-a515-4352-ae47-cfe5a8abc982
 
 ## Engines
 
