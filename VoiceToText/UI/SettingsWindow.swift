@@ -19,6 +19,6 @@ struct SettingsWindow: View {
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
         .padding()
-        .frame(minWidth: 450, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
+        .frame(minWidth: 470, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
     }
 }
